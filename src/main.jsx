@@ -184,25 +184,28 @@ function calculateFormula(source,cells,stack=[]){
  const parseCompare=()=>{let v=concat();while(['=','<>','>','<','>=','<='].includes(peek())){const op=take(),r=concat();switch(op){case '=':v=v===r;break;case '<>':v=v!==r;break;case '>':v=v>r;break;case '<':v=v<r;break;case '>=':v=v>=r;break;case '<=':v=v<=r;break}}return v};
  try{const result=parseCompare();if(index!==tokens.length)throw Error('Unexpected token');if(typeof result==='number'&&!Number.isFinite(result))return '#DIV/0!';return result}catch(error){return error.message==='#CYCLE!'?'#CYCLE!':'#VALUE!'}
 }
+function loadSavedWorkbook(){try{const raw=localStorage.getItem('smartoffice-workbook');if(!raw)return null;const data=JSON.parse(raw);return data&&typeof data==='object'?data:null}catch{return null}}
 function ExcelEditor({onBack}){
+ const [initialWorkbook]=React.useState(loadSavedWorkbook);
  const [active,setActive]=React.useState('Home');
  const [menuOpen,setMenuOpen]=React.useState(false);
  const [selected,setSelected]=React.useState('A1');
  const [formula,setFormula]=React.useState('');
  const [editingCell,setEditingCell]=React.useState(null);
- const [cells,setCells]=React.useState({});
- const [cellStyles,setCellStyles]=React.useState({});
- const [cellHistory,setCellHistory]=React.useState([{}]);
+ const [cells,setCells]=React.useState(()=>initialWorkbook?.cells||{});
+ const [cellStyles,setCellStyles]=React.useState(()=>initialWorkbook?.cellStyles||{});
+ const [cellHistory,setCellHistory]=React.useState(()=>[initialWorkbook?.cells||{}]);
  const [historyIndex,setHistoryIndex]=React.useState(0);
  const [clipboard,setClipboard]=React.useState(null);
- const [sheet,setSheet]=React.useState('Sheet1');
- const [workbookName,setWorkbookName]=React.useState('Book1');
+ const [sheet,setSheet]=React.useState(()=>initialWorkbook?.sheet||'Sheet1');
+ const [workbookName,setWorkbookName]=React.useState(()=>initialWorkbook?.workbookName||'Book1');
  const [notice,setNotice]=React.useState('');
  const [showFormula,setShowFormula]=React.useState(true);
  const [showGrid,setShowGrid]=React.useState(true);
  const [filter,setFilter]=React.useState(false);
  const colName=n=>{let s='';while(n>0){let r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}return s};
  const notify=t=>{setNotice(t);setTimeout(()=>setNotice(''),1800)};
+ React.useEffect(()=>{const timer=setTimeout(()=>{try{localStorage.setItem('smartoffice-workbook',JSON.stringify({cells,cellStyles,sheet,workbookName,savedAt:new Date().toISOString()}));}catch{notify('Device storage is full; export your workbook to keep a copy')}},350);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName]);
  const selectCell=(id)=>{setSelected(id);setFormula(cells[id]||'')};
  const updateCell=(id,value)=>{
   const next={...cells,[id]:value};
