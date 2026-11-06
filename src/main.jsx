@@ -409,37 +409,42 @@ function ExcelEditor({onBack}){
     const aggregation=pivotWizard.aggregation||'count',valueField=pivotWizard.valueField||'';
     const valueIndex=valueField?headers.indexOf(valueField):-1;
     if(aggregation!=='count'&&valueIndex<0)throw Error('যোগ/গড় করার জন্য Values থেকে একটি সংখ্যার Field নির্বাচন করুন');
-    const grouped=new Map();let grandSum=0,grandCount=0;
+    const grouped=new Map();
     const cleanLabel=v=>String(v??'').replace(/\\s+/g,' ').trim()||'(blank)';
+    const groupKey=values=>JSON.stringify(values.map(v=>v.toLocaleLowerCase()));
     for(const record of matrix.slice(1)){
      const values=fieldIndexes.map(i=>cleanLabel(record[i]));
-     const key=JSON.stringify(values);
-     if(!grouped.has(key))grouped.set(key,{values,aggregate:0,recordCount:0,valueCount:0});
+     const key=groupKey(values);
+     if(!grouped.has(key))grouped.set(key,{values,aggregate:0,recordCount:0,valueCount:0,parentKey:values[0].toLocaleLowerCase()});
      const item=grouped.get(key);item.recordCount++;
      if(aggregation==='count'){item.aggregate++;item.valueCount++;}
-     else {const raw=record[valueIndex],num=numericValue(raw);if(num!==null){item.aggregate+=num;item.valueCount++;grandSum+=num;grandCount++;}}
+     else {const raw=record[valueIndex],num=numericValue(raw);if(num!==null){item.aggregate+=num;item.valueCount++;}}
     }
     const detailRows=[...grouped.values()].map(item=>({...item,result:aggregation==='average'?(item.valueCount?item.aggregate/item.valueCount:0):item.aggregate})).sort((a,b)=>JSON.stringify(a.values).localeCompare(JSON.stringify(b.values),'en',{numeric:true,sensitivity:'base'}));
     const rows=[];
     if(allFields.length>1){
-     let currentParent=null,parentItems=[];
+     let currentParent=null,currentParentKey=null,parentItems=[];
      const addParentSubtotal=()=>{
-      if(currentParent===null)return;
+      if(currentParentKey===null)return;
       const parentSum=parentItems.reduce((n,x)=>n+x.aggregate,0),parentCount=parentItems.reduce((n,x)=>n+x.valueCount,0);
       const subtotal=aggregation==='count'?parentItems.reduce((n,x)=>n+x.recordCount,0):aggregation==='average'?(parentCount?parentSum/parentCount:0):parentSum;
       rows.push({values:[currentParent,...Array(allFields.length-1).fill('')],result:subtotal,rowType:'subtotal'});
      };
      for(const item of detailRows){
-      const parent=item.values[0];
-      if(currentParent!==null&&parent!==currentParent)addParentSubtotal();
-      if(parent!==currentParent){currentParent=parent;parentItems=[];}
+      const parent=item.values[0],parentKey=item.parentKey;
+      if(currentParentKey!==null&&parentKey!==currentParentKey)addParentSubtotal();
+      if(parentKey!==currentParentKey){currentParent=parent;currentParentKey=parentKey;parentItems=[];}
       parentItems.push(item);
       const shown=[...item.values];shown[0]='';
       rows.push({...item,values:shown,rowType:'detail'});
      }
      addParentSubtotal();
     }else rows.push(...detailRows.map(item=>({...item,rowType:'detail'})));
-    const grandTotal=aggregation==='count'?matrix.length-1:aggregation==='average'?(grandCount?grandSum/grandCount:0):grandSum;
+    // Grand Total is calculated from detail groups only; subtotal display rows are never added again.
+    const groupedCount=detailRows.reduce((n,x)=>n+x.recordCount,0);
+    const groupedSum=detailRows.reduce((n,x)=>n+x.aggregate,0);
+    const groupedValueCount=detailRows.reduce((n,x)=>n+x.valueCount,0);
+    const grandTotal=aggregation==='count'?groupedCount:aggregation==='average'?(groupedValueCount?groupedSum/groupedValueCount:0):groupedSum;
     const measureHeader=aggregation==='count'?'Count':(aggregation==='sum'?'Sum of ':'Average of ')+valueField;
     setPivot({range:pivotWizard.range,rowFields,columnFields,headers:allFields,rows,grandTotal,aggregation,valueField,measureHeader});setPivotWizard(null);notify('PivotTable রিপোর্ট তৈরি হয়েছে');
    }
