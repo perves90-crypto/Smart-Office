@@ -1,4 +1,5 @@
 import React from 'react';
+import * as XLSX from 'xlsx';
 import {createRoot} from 'react-dom/client';
 import {FileText,Table2,Presentation,File,FolderOpen,Clock3,Settings,ShieldCheck,Grid2X2,Home,Folder,Eye,Plus,Database,ClipboardCheck,Save,Printer,Undo2,Redo2,Copy,Scissors,Clipboard,Paintbrush,Type,Bold,Italic,Underline,AlignLeft,AlignCenter,AlignRight,WrapText,Merge,Filter,ArrowDownUp,Search,Check,MessageSquare,Lock,BarChart3,Image,Link,Calculator,Percent,Coins,CalendarDays,SortAsc,FileSpreadsheet,X,ChevronDown} from 'lucide-react';
 import './style.css';
@@ -195,6 +196,7 @@ function ExcelEditor({onBack}){
  const [historyIndex,setHistoryIndex]=React.useState(0);
  const [clipboard,setClipboard]=React.useState(null);
  const [sheet,setSheet]=React.useState('Sheet1');
+ const [workbookName,setWorkbookName]=React.useState('Book1');
  const [notice,setNotice]=React.useState('');
  const [showFormula,setShowFormula]=React.useState(true);
  const [showGrid,setShowGrid]=React.useState(true);
@@ -247,6 +249,12 @@ function ExcelEditor({onBack}){
   window.addEventListener('keydown',onKeyDown);
   return ()=>window.removeEventListener('keydown',onKeyDown);
  });
+ const importWorkbook=(file)=>{
+  const reader=new FileReader();reader.onload=(event)=>{try{const data=new Uint8Array(event.target.result);const wb=XLSX.read(data,{type:'array',cellFormula:true});const first=wb.SheetNames[0];if(!first)throw Error('No worksheet');const ws=wb.Sheets[first];const range=XLSX.utils.decode_range(ws['!ref']||'A1:A1');const next={};for(let r=range.s.r;r<=range.e.r;r++){for(let col=range.s.c;col<=range.e.c;col++){const address=XLSX.utils.encode_cell({r,c:col});const cell=ws[address];if(!cell)continue;next[address]=cell.f?'='+cell.f:(cell.v===undefined?'':String(cell.v));}}setCells(next);setCellHistory([{},next]);setHistoryIndex(1);setCellStyles({});setSheet(first);setSelected('A1');setFormula(next.A1||'');setWorkbookName(file.name.replace(/\\.(xlsx|xls|csv)$/i,''));notify('Workbook imported successfully');}catch(error){notify('Import failed: '+error.message)}};reader.onerror=()=>notify('Could not read file');reader.readAsArrayBuffer(file);
+ };
+ const exportWorkbook=(format='xlsx')=>{
+  try{let maxRow=0,maxCol=0;for(const key of Object.keys(cells)){const p=cellToPosition(key);if(p){maxRow=Math.max(maxRow,p.row);maxCol=Math.max(maxCol,p.col)}}const aoa=Array.from({length:Math.max(1,maxRow)},()=>Array(Math.max(1,maxCol)).fill(''));const ws=XLSX.utils.aoa_to_sheet(aoa);for(const [key,value] of Object.entries(cells)){const p=cellToPosition(key);if(!p)continue;if(typeof value==='string'&&value.startsWith('='))ws[key]={t:'n',f:value.slice(1)};else ws[key]={v:value,t:typeof value==='number'?'n':'s'};}ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(0,maxRow-1),c:Math.max(0,maxCol-1)}});const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,sheet.slice(0,31)||'Sheet1');const filename=(workbookName.trim()||'Book1')+(format==='csv'?'.csv':'.xlsx');if(format==='csv'){const csv=XLSX.utils.sheet_to_csv(ws);const blob=new Blob(['\\uFEFF',csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);}else XLSX.writeFile(wb,filename);notify('Workbook downloaded');}catch(error){notify('Export failed: '+error.message)}
+ };
  const action=(name)=>{
   if(name==='Undo'){undo();return}
   if(name==='Redo'){redo();return}
@@ -254,8 +262,9 @@ function ExcelEditor({onBack}){
   if(name==='Cut'){copyCell(true);return}
   if(name==='Paste'){pasteCell();return}
   if(name==='Format Painter'){const style=cellStyles[selected]||{};setClipboard({kind:'style',value:'',style});notify('Format copied — select Paste to apply');return}
-  if(name==='Save'||name==='Save As'){notify('Workbook save option is being prepared');return}
+  if(name==='Save'||name==='Save As'){exportWorkbook('xlsx');return}
   if(name==='Open'){document.getElementById('excelFileInput')?.click();return}
+  if(name==='Export PDF'){notify('PDF export will be added in a later update');return}
   if(name==='Export PDF'||name==='Print'){notify(name+' option selected');return}
   if(name==='Gridlines'){setShowGrid(v=>!v);return}
   if(name==='Formula Bar'){setShowFormula(v=>!v);return}
@@ -284,14 +293,14 @@ function ExcelEditor({onBack}){
  const rows=Array.from({length:24},(_,i)=>i+1),cols=Array.from({length:10},(_,i)=>i+1);
  return <div className="excelApp">
   <header className="excelTop"><button className="backBtn" onClick={onBack}>‹</button><div className="excelTitle"><b><Table2 size={19}/> Smart Excel</b><small>Workbook • {sheet}</small></div><button className="topIcon" onClick={()=>action('Save')}><Save size={19}/></button><button className="topIcon" onClick={()=>notify('More workbook options')}><Settings size={19}/></button></header>
-  <div className="workbookBar"><span className="fileBadge"><FileSpreadsheet size={16}/></span><input aria-label="Workbook name" defaultValue="Book1" /><span className="savedState">● Saved locally</span></div>
+  <div className="workbookBar"><span className="fileBadge"><FileSpreadsheet size={16}/></span><input aria-label="Workbook name" value={workbookName} onChange={e=>setWorkbookName(e.target.value)} /><span className="savedState">● Saved locally</span></div>
   <div className="ribbonStrip">{ribbonData[active].map(group=><div className="ribbonGroup" key={group.group}><div className="ribbonButtons">{group.items.map(([label,Icon])=><button key={label} className="ribbonAction" onClick={()=>action(label)} title={label}><Icon size={17}/><span>{label}</span></button>)}</div><small>{group.group}</small></div>)}</div>
   {showFormula&&<div className="formulaBar"><span className="cellRef">{selected}</span><span className="fx">fx</span><input value={formula} onChange={e=>{setFormula(e.target.value);updateCell(selected,e.target.value)}} placeholder="Enter value or formula"/></div>}
   <div className="sheetScroll"><table className={showGrid?'sheetGrid':'sheetGrid noGrid'}><thead><tr><th className="corner"></th>{cols.map(c=><th key={c}>{colName(c)}</th>)}</tr></thead><tbody>{rows.map(r=><tr key={r}><th>{r}</th>{cols.map(c=>{const id=colName(c)+r;const style=cellStyles[id]||{};let display=cells[id]===undefined?'':String(calculateCell(id,cells));if(style.numberFormat==='currency'&&display!==''&&Number.isFinite(Number(display)))display='৳ '+Number(display).toFixed(2);if(style.numberFormat==='percent'&&display!==''&&Number.isFinite(Number(display)))display=(Number(display)*100).toFixed(2)+'%';return <td key={id} className={selected===id?'selectedCell':''}><input style={{fontWeight:style.bold?'700':'400',fontStyle:style.italic?'italic':'normal',textDecoration:style.underline?'underline':'none',textAlign:style.textAlign||'left',color:style.color||'inherit',backgroundColor:style.backgroundColor||'transparent'}} aria-label={id} value={editingCell===id?(cells[id]||''):display} onFocus={()=>{selectCell(id);setEditingCell(id)}} onBlur={()=>setEditingCell(null)} onChange={e=>{updateCell(id,e.target.value);if(selected===id)setFormula(e.target.value)}} onDoubleClick={()=>{selectCell(id);setEditingCell(id)}}/></td>})}</tr>)}</tbody></table></div>
   <div className="sheetTabs"><button className="sheetNav" onClick={()=>notify('Previous sheet')}>‹</button><button className="sheetTab activeSheet">{sheet}</button><button className="addSheet" onClick={()=>{setSheet('Sheet'+(Number(sheet.replace('Sheet',''))+1||2));notify('New sheet added')}}><Plus size={17}/></button><span className="sheetStatus">Ready</span></div>
   <button className="ribbonMenuButton" onClick={()=>setMenuOpen(v=>!v)} aria-label="Open ribbon menu"><Grid2X2 size={24}/></button>
   {menuOpen&&<><div className="menuScrim" onClick={()=>setMenuOpen(false)}></div><div className="ribbonMenuPanel"><div className="menuPanelTitle">Workbook Menu <button onClick={()=>setMenuOpen(false)}><X size={18}/></button></div>{menus.map(([name,Icon])=><button key={name} className={'menuChoice '+(active===name?'chosen':'')} onClick={()=>{setActive(name);setMenuOpen(false)}}><Icon size={19}/><span>{name}</span>{active===name&&<Check size={16}/>}</button>)}</div></>}
-  <input id="excelFileInput" type="file" hidden accept=".xls,.xlsx,.csv" onChange={e=>e.target.files?.[0]&&notify('Selected '+e.target.files[0].name+' — import engine is next phase')}/>
+  <input id="excelFileInput" type="file" hidden accept=".xls,.xlsx,.csv" onChange={e=>{if(e.target.files?.[0])importWorkbook(e.target.files[0]);e.target.value=''}}/>
   {notice&&<div className="excelToast">{notice}</div>}
  </div>
 }
