@@ -22,3 +22,36 @@
 .pivotSlot span{flex:1;font-size:12px;overflow-wrap:anywhere}
 .pivotSlot button{border:0;background:#fee2e2;border-radius:5px;padding:2px 7px}
 @media(max-width:520px){.pivotTenZones{grid-template-columns:1fr}}
+
+
+/* Mobile PivotTable wizard: keep field zones scrollable and compact */
+.sheetScroll{min-height:0;overscroll-behavior:contain}
+.pivotWizard{flex:0 1 auto;min-height:0;max-height:min(42dvh,380px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.pivotWizard .pivotNext{position:sticky;bottom:0;z-index:2;box-shadow:0 -4px 10px #f8fbff}
+.pivotFields{gap:5px;margin:7px 0}
+.pivotField{padding:5px 8px;font-size:11px;line-height:1.2;border-radius:6px}
+.pivotTenZones{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.pivotZone{gap:4px}
+.pivotZone>b{padding:5px 7px;font-size:11px}
+.pivotSlot{gap:4px;min-height:29px;padding:3px 5px;border-radius:5px}
+.pivotSlot small{min-width:14px;font-size:9px}
+.pivotSlot span{font-size:10px;line-height:1.15}
+.pivotSlot button{padding:1px 5px;font-size:11px}
+@media(max-width:520px){
+ .ribbonStrip{height:88px;padding:4px 4px 2px;gap:2px}
+ .ribbonGroup{min-width:76px;padding:0 4px}
+ .ribbonAction{min-width:31px;max-width:48px;height:38px;padding:2px;gap:2px}
+ .ribbonAction svg{width:14px;height:14px}
+ .ribbonAction span{font-size:7px}
+ .ribbonGroup>small{font-size:8px;padding:2px 0 0}
+ .pivotWizard{margin:5px 7px;padding:8px;max-height:min(43dvh,360px);border-radius:9px}
+ .pivotWizard p{font-size:11px;line-height:1.35;margin:5px 0}
+ .pivotFields{gap:4px;margin:6px 0}
+ .pivotField{padding:4px 6px;font-size:10px}
+ .pivotTenZones{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+ .pivotSlot{min-height:26px;padding:2px 4px;gap:3px}
+ .pivotSlot span{font-size:9px}
+ .pivotSlot small{min-width:12px;font-size:8px}
+ .pivotSlot button{padding:0 4px;font-size:10px}
+ .pivotNext{padding:8px;font-size:11px;margin-top:7px}
+}
