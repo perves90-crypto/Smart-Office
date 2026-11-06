@@ -9,7 +9,7 @@ const ribbonData = {
   {group:'Font',items:[['Font',Type],['Bold',Bold],['Italic',Italic],['Underline',Underline],['Font Color',Type]]},
   {group:'Alignment',items:[['Align Left',AlignLeft],['Center',AlignCenter],['Align Right',AlignRight],['Wrap Text',WrapText],['Merge Cells',Merge]]},
   {group:'Number',items:[['Number Format',Calculator],['Currency',Coins],['Percent',Percent],['Date',CalendarDays]]},
-  {group:'Cells',items:[['Insert',Plus],['Delete',X],['Format',Grid2X2]]},
+  {group:'Cells',items:[['Insert Rows',Plus],['Insert Columns',Plus],['Delete Rows',X],['Delete Columns',X],['Format',Grid2X2]]},
   {group:'Editing',items:[['AutoSum',Calculator],['Fill',ChevronDown],['Clear',X],['Find',Search],['Sort & Filter',Filter]]}
  ],
  File: [
@@ -228,6 +228,10 @@ function ExcelEditor({onBack}){
   setFormula(clipboard.value);
   notify('Cell pasted');
  };
+ const shiftCells=(axis,at,remove=false)=>{
+  const remap=(source)=>{const out={};for(const [key,value] of Object.entries(source)){const p=cellToPosition(key);if(!p)continue;const n=axis==='row'?p.row:p.col;if(remove&&n===at)continue;const moved=remove?(n>at?n-1:n):(n>=at?n+1:n);const dest=axis==='row'?positionToCell(p.col,moved):positionToCell(moved,p.row);out[dest]=value;}return out;};
+  const next=remap(cells),styles=remap(cellStyles);setCells(next);setCellStyles(styles);setCellHistory(h=>[...h.slice(0,historyIndex+1),next].slice(-101));setHistoryIndex(i=>Math.min(i+1,100));setFormula(next[selected]||'');notify((remove?'Deleted ':'Inserted ')+(axis==='row'?'row':'column'));
+ };
  const updateStyle=(patch)=>setCellStyles(p=>({...p,[selected]:{...(p[selected]||{}),...patch}}));
  const toggleStyle=(key)=>updateStyle({[key]:!cellStyles[selected]?.[key]});
  React.useEffect(()=>{
@@ -258,6 +262,12 @@ function ExcelEditor({onBack}){
   if(name==='Filter'){setFilter(v=>!v);return}
   if(name==='New Workbook'){setCells({});setCellHistory([{}]);setHistoryIndex(0);setCellStyles({});setSelected('A1');setFormula('');notify('New workbook created');return}
   if(name==='AutoSum'){const p=cellToPosition(selected);if(p){let start=p.row-1;while(start>1&&cells[positionToCell(p.col,start-1)]!==undefined&&cells[positionToCell(p.col,start-1)]!=='')start--;const end=p.row-1;const ref=end>=start?positionToCell(p.col,start)+':'+positionToCell(p.col,end):positionToCell(p.col,1)+':'+positionToCell(p.col,1);const value='=SUM('+ref+')';setFormula(value);updateCell(selected,value);notify('SUM formula added')}return}
+  if(name==='Insert Rows'||name==='Delete Rows'||name==='Insert Columns'||name==='Delete Columns'){
+   const p=cellToPosition(selected);if(!p)return;
+   const axis=name.includes('Rows')?'row':'col';const remove=name.startsWith('Delete');const at=axis==='row'?p.row:p.col;
+   if(remove&&at===1){notify('The first row/column cannot be deleted');return;}
+   shiftCells(axis,at,remove);return;
+  }
   if(name==='Bold'){toggleStyle('bold');return}
   if(name==='Italic'){toggleStyle('italic');return}
   if(name==='Underline'){toggleStyle('underline');return}
