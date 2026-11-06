@@ -13,3 +13,12 @@
 .pivotDropZones>div{min-height:72px;padding:10px;border:2px dashed #8ca9ce;border-radius:8px;background:#eef5ff;display:flex;flex-direction:column;gap:8px}
 .pivotDropZones span{font-size:12px;color:#315b91}
 .sheetGrid td.rangeSelected{outline:2px solid #2675db;outline-offset:-2px;background:#dceaff}
+
+.pivotTenZones{display:grid!important;grid-template-columns:repeat(2,minmax(230px,1fr));gap:12px;align-items:start}
+.pivotZone{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pivotZone>b{padding:8px;background:#e8f0fe;border-radius:7px}
+.pivotSlot{display:flex;align-items:center;gap:8px;min-height:38px;padding:5px 8px;border:1px dashed #8b9bb5;border-radius:7px;background:#fff}
+.pivotSlot small{min-width:18px;color:#64748b}
+.pivotSlot span{flex:1;font-size:12px;overflow-wrap:anywhere}
+.pivotSlot button{border:0;background:#fee2e2;border-radius:5px;padding:2px 7px}
+@media(max-width:520px){.pivotTenZones{grid-template-columns:1fr}}
