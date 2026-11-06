@@ -55,3 +55,7 @@
  .pivotSlot button{padding:0 4px;font-size:10px}
  .pivotNext{padding:8px;font-size:11px;margin-top:7px}
 }
+
+/* Whole row and column selection */
+.sheetGrid th.axisSelected{background:#d9f0e2;color:#11663b;box-shadow:inset 0 0 0 2px #16834b;cursor:pointer}.sheetGrid td.bandSelected{background:#edf8f0}.sheetGrid td.bandSelected input{background:#edf8f0}
+.sheetGrid thead th:not(.corner),.sheetGrid tbody th{cursor:pointer}
