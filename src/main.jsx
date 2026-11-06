@@ -48,30 +48,65 @@ function cellToPosition(ref){
  return {col,row:Number(m[2])};
 }
 function positionToCell(col,row){let s='';while(col>0){const n=(col-1)%26;s=String.fromCharCode(65+n)+s;col=Math.floor((col-1)/26)}return s+row}
-function calculateCell(ref,cells,stack=[]){
- if(stack.includes(ref))return '#CYCLE!';
- const raw=cells[ref];if(raw===undefined||raw==='')return 0;
- if(typeof raw!=='string'||!raw.startsWith('=')){const n=Number(raw);return Number.isFinite(n)&&String(raw).trim()!==''?n:raw}
- return calculateFormula(raw.slice(1),cells,[...stack,ref]);
+function numericValue(value){
+ if(typeof value==='number')return Number.isFinite(value)?value:null;
+ if(value===null||value===undefined||String(value).trim()==='')return null;
+ let s=String(value).trim().replace(/[৳$€£,\\s]/g,'');
+ if(s.endsWith('%')){const n=Number(s.slice(0,-1));return Number.isFinite(n)?n/100:null}
+ if(/^\\(.*\\)$/.test(s))s='-'+s.slice(1,-1);
+ const n=Number(s);return Number.isFinite(n)?n:null;
 }
-function calculateFormula(source,cells,stack){
- const rangeValues=(token)=>{
-  if(token.includes(':')){
-   const [a,b]=token.split(':');const p1=cellToPosition(a),p2=cellToPosition(b);if(!p1||!p2)throw Error();
-   const out=[];for(let r=Math.min(p1.row,p2.row);r<=Math.max(p1.row,p2.row);r++)for(let col=Math.min(p1.col,p2.col);col<=Math.max(p1.col,p2.col);col++)out.push(calculateCell(positionToCell(col,r),cells,stack));return out;
-  }
-  return [calculateCell(token,cells,stack)];
+function calculateCell(ref,cells,stack=[]){
+ const key=String(ref).toUpperCase();
+ if(stack.includes(key))return '#CYCLE!';
+ const raw=cells[key];if(raw===undefined||raw===null||String(raw).trim()==='')return 0;
+ if(typeof raw==='string'&&raw.trim().startsWith('='))return calculateFormula(raw.trim().slice(1),cells,[...stack,key]);
+ const n=numericValue(raw);return n===null?raw:n;
+}
+function calculateFormula(source,cells,stack=[]){
+ const getRange=(token)=>{
+  const t=token.trim().replace(/\\$/g,'');
+  if(!t.includes(':'))return [calculateCell(t.toUpperCase(),cells,stack)];
+  const parts=t.split(':');if(parts.length!==2)throw Error('Bad range');
+  const a=cellToPosition(parts[0]),b=cellToPosition(parts[1]);if(!a||!b)throw Error('Bad reference');
+  const values=[];
+  for(let row=Math.min(a.row,b.row);row<=Math.max(a.row,b.row);row++)
+   for(let col=Math.min(a.col,b.col);col<=Math.max(a.col,b.col);col++)
+    values.push(calculateCell(positionToCell(col,row),cells,stack));
+  return values;
  };
  try{
-  const fn=source.match(/^(SUM|AVERAGE|COUNT|MAX|MIN)\((.*)\)$/i);
-  if(fn){const args=fn[2].split(',').flatMap(x=>rangeValues(x.trim())).filter(x=>typeof x==='number'&&Number.isFinite(x));const name=fn[1].toUpperCase();if(name==='COUNT')return args.length;if(name==='SUM')return args.reduce((a,b)=>a+b,0);if(name==='AVERAGE')return args.length?args.reduce((a,b)=>a+b,0)/args.length:0;if(name==='MAX')return args.length?Math.max(...args):0;return args.length?Math.min(...args):0}
-  const expression=source.replace(/([A-Z]+[1-9][0-9]*)/gi,(ref)=>{const v=calculateCell(ref.toUpperCase(),cells,stack);if(typeof v!=='number'||!Number.isFinite(v))throw Error();return String(v)});
-  if(!/^[0-9+\-*/().\s]+$/.test(expression))throw Error();
-  const tokens=expression.match(/\d+(?:\.\d+)?|[()+\-*/]/g)||[];let i=0;
-  const primary=()=>{const t=tokens[i++];if(t==='('){const v=add();if(tokens[i++]!==')')throw Error();return v}if(t==='+')return primary();if(t==='-')return -primary();const n=Number(t);if(!Number.isFinite(n))throw Error();return n};
+  const fn=source.trim().match(/^(SUM|AVERAGE|COUNT|MAX|MIN)\\s*\\((.*)\\)$/i);
+  if(fn){
+   const args=fn[2].split(',').flatMap(getRange);
+   const nums=args.map(v=>typeof v==='number'?v:numericValue(v)).filter(v=>v!==null);
+   const name=fn[1].toUpperCase();
+   if(name==='COUNT')return nums.length;
+   if(name==='SUM')return nums.reduce((a,b)=>a+b,0);
+   if(name==='AVERAGE')return nums.length?nums.reduce((a,b)=>a+b,0)/nums.length:0;
+   if(name==='MAX')return nums.length?Math.max(...nums):0;
+   return nums.length?Math.min(...nums):0;
+  }
+  const expression=source.trim().replace(/([A-Z]+\\$?[1-9][0-9]*)/gi,(ref)=>{
+   const normalized=ref.replace(/\\$/g,'').toUpperCase();
+   const v=calculateCell(normalized,cells,stack);
+   const n=typeof v==='number'?v:numericValue(v);
+   if(n===null)throw Error('Non-numeric reference');
+   return String(n);
+  });
+  if(!/^[0-9+\\-*/().\\s]+$/.test(expression))throw Error('Invalid formula');
+  const tokens=expression.match(/\\d+(?:\\.\\d+)?|[()+\\-*/]/g)||[];
+  let i=0;
+  const primary=()=>{
+   const t=tokens[i++];
+   if(t==='('){const v=add();if(tokens[i++]!==')')throw Error('Missing )');return v}
+   if(t==='+')return primary();
+   if(t==='-')return -primary();
+   const n=Number(t);if(!Number.isFinite(n))throw Error('Bad number');return n;
+  };
   const mul=()=>{let v=primary();while(tokens[i]==='*'||tokens[i]==='/'){const op=tokens[i++],n=primary();v=op==='*'?v*n:v/n}return v};
   const add=()=>{let v=mul();while(tokens[i]==='+'||tokens[i]==='-'){const op=tokens[i++],n=mul();v=op==='+'?v+n:v-n}return v};
-  const result=add();if(i!==tokens.length||!Number.isFinite(result))throw Error();return result;
+  const result=add();if(i!==tokens.length||!Number.isFinite(result))throw Error('Invalid result');return result;
  }catch{return '#VALUE!'}
 }
 function ExcelEditor({onBack}){
