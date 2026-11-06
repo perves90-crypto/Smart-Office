@@ -51,9 +51,9 @@ function positionToCell(col,row){let s='';while(col>0){const n=(col-1)%26;s=Stri
 function numericValue(value){
  if(typeof value==='number')return Number.isFinite(value)?value:null;
  if(value===null||value===undefined||String(value).trim()==='')return null;
- let s=String(value).trim().replace(/[৳$€£,\\s]/g,'');
+ let s=String(value).trim().replace(/[৳$€£,\s]/g,'');
  if(s.endsWith('%')){const n=Number(s.slice(0,-1));return Number.isFinite(n)?n/100:null}
- if(/^\\(.*\\)$/.test(s))s='-'+s.slice(1,-1);
+ if(/^\(.*\)$/.test(s))s='-'+s.slice(1,-1);
  const n=Number(s);return Number.isFinite(n)?n:null;
 }
 function calculateCell(ref,cells,stack=[]){
@@ -65,7 +65,7 @@ function calculateCell(ref,cells,stack=[]){
 }
 function calculateFormula(source,cells,stack=[]){
  const getRange=(token)=>{
-  const t=token.trim().replace(/\\$/g,'');
+  const t=token.trim().replace(/\$/g,'');
   if(!t.includes(':'))return [calculateCell(t.toUpperCase(),cells,stack)];
   const parts=t.split(':');if(parts.length!==2)throw Error('Bad range');
   const a=cellToPosition(parts[0]),b=cellToPosition(parts[1]);if(!a||!b)throw Error('Bad reference');
@@ -76,7 +76,7 @@ function calculateFormula(source,cells,stack=[]){
   return values;
  };
  try{
-  const fn=source.trim().match(/^(SUM|AVERAGE|COUNT|MAX|MIN)\\s*\\((.*)\\)$/i);
+  const fn=source.trim().match(/^(SUM|AVERAGE|COUNT|MAX|MIN)\s*\((.*)\)$/i);
   if(fn){
    const args=fn[2].split(',').flatMap(getRange);
    const nums=args.map(v=>typeof v==='number'?v:numericValue(v)).filter(v=>v!==null);
@@ -87,15 +87,15 @@ function calculateFormula(source,cells,stack=[]){
    if(name==='MAX')return nums.length?Math.max(...nums):0;
    return nums.length?Math.min(...nums):0;
   }
-  const expression=source.trim().replace(/([A-Z]+\\$?[1-9][0-9]*)/gi,(ref)=>{
-   const normalized=ref.replace(/\\$/g,'').toUpperCase();
+  const expression=source.trim().replace(/([A-Z]+\$?[1-9][0-9]*)/gi,(ref)=>{
+   const normalized=ref.replace(/\$/g,'').toUpperCase();
    const v=calculateCell(normalized,cells,stack);
    const n=typeof v==='number'?v:numericValue(v);
    if(n===null)throw Error('Non-numeric reference');
    return String(n);
   });
-  if(!/^[0-9+\\-*/().\\s]+$/.test(expression))throw Error('Invalid formula');
-  const tokens=expression.match(/\\d+(?:\\.\\d+)?|[()+\\-*/]/g)||[];
+  if(!/^[0-9+\-*/().\s]+$/.test(expression))throw Error('Invalid formula');
+  const tokens=expression.match(/\d+(?:\.\d+)?|[()+\-*/]/g)||[];
   let i=0;
   const primary=()=>{
    const t=tokens[i++];
