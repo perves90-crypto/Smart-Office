@@ -81,6 +81,7 @@ function ExcelEditor({onBack}){
  const [formula,setFormula]=React.useState('');
  const [editingCell,setEditingCell]=React.useState(null);
  const [cells,setCells]=React.useState({});
+ const [cellStyles,setCellStyles]=React.useState({});
  const [sheet,setSheet]=React.useState('Sheet1');
  const [notice,setNotice]=React.useState('');
  const [showFormula,setShowFormula]=React.useState(true);
@@ -90,6 +91,8 @@ function ExcelEditor({onBack}){
  const notify=t=>{setNotice(t);setTimeout(()=>setNotice(''),1800)};
  const selectCell=(id)=>{setSelected(id);setFormula(cells[id]||'')};
  const updateCell=(id,value)=>setCells(p=>({...p,[id]:value}));
+ const updateStyle=(patch)=>setCellStyles(p=>({...p,[selected]:{...(p[selected]||{}),...patch}}));
+ const toggleStyle=(key)=>updateStyle({[key]:!cellStyles[selected]?.[key]});
  const action=(name)=>{
   if(name==='Save'||name==='Save As'){notify('Workbook save option is being prepared');return}
   if(name==='Open'){document.getElementById('excelFileInput')?.click();return}
@@ -99,7 +102,17 @@ function ExcelEditor({onBack}){
   if(name==='Filter'){setFilter(v=>!v);return}
   if(name==='New Workbook'){setCells({});setSelected('A1');setFormula('');notify('New workbook created');return}
   if(name==='AutoSum'){const p=cellToPosition(selected);if(p){let start=p.row-1;while(start>1&&cells[positionToCell(p.col,start-1)]!==undefined&&cells[positionToCell(p.col,start-1)]!=='')start--;const end=p.row-1;const ref=end>=start?positionToCell(p.col,start)+':'+positionToCell(p.col,end):positionToCell(p.col,1)+':'+positionToCell(p.col,1);const value='=SUM('+ref+')';setFormula(value);updateCell(selected,value);notify('SUM formula added')}return}
-  if(name==='Bold'||name==='Italic'||name==='Underline'){notify(name+' formatting selected');return}
+  if(name==='Bold'){toggleStyle('bold');return}
+  if(name==='Italic'){toggleStyle('italic');return}
+  if(name==='Underline'){toggleStyle('underline');return}
+  if(name==='Align Left'){updateStyle({textAlign:'left'});return}
+  if(name==='Center'){updateStyle({textAlign:'center'});return}
+  if(name==='Align Right'){updateStyle({textAlign:'right'});return}
+  if(name==='Font Color'){const color=window.prompt('Enter font color (example: #ff0000):',cellStyles[selected]?.color||'#202124');if(color)updateStyle({color});return}
+  if(name==='Fill'){const color=window.prompt('Enter cell fill color (example: #fff2cc):',cellStyles[selected]?.backgroundColor||'#fff2cc');if(color)updateStyle({backgroundColor:color});return}
+  if(name==='Currency'){updateStyle({numberFormat:'currency'});return}
+  if(name==='Percent'){updateStyle({numberFormat:'percent'});return}
+  if(name==='Date'){updateStyle({numberFormat:'date'});return}
   notify(name+' selected');
  };
  const rows=Array.from({length:24},(_,i)=>i+1),cols=Array.from({length:10},(_,i)=>i+1);
@@ -108,7 +121,7 @@ function ExcelEditor({onBack}){
   <div className="workbookBar"><span className="fileBadge"><FileSpreadsheet size={16}/></span><input aria-label="Workbook name" defaultValue="Book1" /><span className="savedState">● Saved locally</span></div>
   <div className="ribbonStrip">{ribbonData[active].map(group=><div className="ribbonGroup" key={group.group}><div className="ribbonButtons">{group.items.map(([label,Icon])=><button key={label} className="ribbonAction" onClick={()=>action(label)} title={label}><Icon size={17}/><span>{label}</span></button>)}</div><small>{group.group}</small></div>)}</div>
   {showFormula&&<div className="formulaBar"><span className="cellRef">{selected}</span><span className="fx">fx</span><input value={formula} onChange={e=>{setFormula(e.target.value);updateCell(selected,e.target.value)}} placeholder="Enter value or formula"/></div>}
-  <div className="sheetScroll"><table className={showGrid?'sheetGrid':'sheetGrid noGrid'}><thead><tr><th className="corner"></th>{cols.map(c=><th key={c}>{colName(c)}</th>)}</tr></thead><tbody>{rows.map(r=><tr key={r}><th>{r}</th>{cols.map(c=>{const id=colName(c)+r;return <td key={id} className={selected===id?'selectedCell':''}><input aria-label={id} value={editingCell===id?(cells[id]||''):(cells[id]===undefined?'':String(calculateCell(id,cells)))} onFocus={()=>{selectCell(id);setEditingCell(id)}} onBlur={()=>setEditingCell(null)} onChange={e=>{updateCell(id,e.target.value);if(selected===id)setFormula(e.target.value)}} onDoubleClick={()=>{selectCell(id);setEditingCell(id)}}/></td>})}</tr>)}</tbody></table></div>
+  <div className="sheetScroll"><table className={showGrid?'sheetGrid':'sheetGrid noGrid'}><thead><tr><th className="corner"></th>{cols.map(c=><th key={c}>{colName(c)}</th>)}</tr></thead><tbody>{rows.map(r=><tr key={r}><th>{r}</th>{cols.map(c=>{const id=colName(c)+r;const style=cellStyles[id]||{};let display=cells[id]===undefined?'':String(calculateCell(id,cells));if(style.numberFormat==='currency'&&display!==''&&Number.isFinite(Number(display)))display='৳ '+Number(display).toFixed(2);if(style.numberFormat==='percent'&&display!==''&&Number.isFinite(Number(display)))display=(Number(display)*100).toFixed(2)+'%';return <td key={id} className={selected===id?'selectedCell':''}><input style={{fontWeight:style.bold?'700':'400',fontStyle:style.italic?'italic':'normal',textDecoration:style.underline?'underline':'none',textAlign:style.textAlign||'left',color:style.color||'inherit',backgroundColor:style.backgroundColor||'transparent'}} aria-label={id} value={editingCell===id?(cells[id]||''):display} onFocus={()=>{selectCell(id);setEditingCell(id)}} onBlur={()=>setEditingCell(null)} onChange={e=>{updateCell(id,e.target.value);if(selected===id)setFormula(e.target.value)}} onDoubleClick={()=>{selectCell(id);setEditingCell(id)}}/></td>})}</tr>)}</tbody></table></div>
   <div className="sheetTabs"><button className="sheetNav" onClick={()=>notify('Previous sheet')}>‹</button><button className="sheetTab activeSheet">{sheet}</button><button className="addSheet" onClick={()=>{setSheet('Sheet'+(Number(sheet.replace('Sheet',''))+1||2));notify('New sheet added')}}><Plus size={17}/></button><span className="sheetStatus">Ready</span></div>
   <button className="ribbonMenuButton" onClick={()=>setMenuOpen(v=>!v)} aria-label="Open ribbon menu"><Grid2X2 size={24}/></button>
   {menuOpen&&<><div className="menuScrim" onClick={()=>setMenuOpen(false)}></div><div className="ribbonMenuPanel"><div className="menuPanelTitle">Workbook Menu <button onClick={()=>setMenuOpen(false)}><X size={18}/></button></div>{menus.map(([name,Icon])=><button key={name} className={'menuChoice '+(active===name?'chosen':'')} onClick={()=>{setActive(name);setMenuOpen(false)}}><Icon size={19}/><span>{name}</span>{active===name&&<Check size={16}/>}</button>)}</div></>}
