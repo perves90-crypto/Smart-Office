@@ -42,11 +42,44 @@ const ribbonData = {
 };
 function ColumnsIcon(){return <Table2/>}
 const menus=[['Home',Home],['File',Folder],['View',Eye],['Insert',Plus],['Data',Database],['Review',ClipboardCheck]];
+function cellToPosition(ref){
+ const m=String(ref).toUpperCase().match(/^([A-Z]+)([1-9][0-9]*)$/);if(!m)return null;
+ let col=0;for(const ch of m[1])col=col*26+ch.charCodeAt(0)-64;
+ return {col,row:Number(m[2])};
+}
+function positionToCell(col,row){let s='';while(col>0){const n=(col-1)%26;s=String.fromCharCode(65+n)+s;col=Math.floor((col-1)/26)}return s+row}
+function calculateCell(ref,cells,stack=[]){
+ if(stack.includes(ref))return '#CYCLE!';
+ const raw=cells[ref];if(raw===undefined||raw==='')return 0;
+ if(typeof raw!=='string'||!raw.startsWith('=')){const n=Number(raw);return Number.isFinite(n)&&String(raw).trim()!==''?n:raw}
+ return calculateFormula(raw.slice(1),cells,[...stack,ref]);
+}
+function calculateFormula(source,cells,stack){
+ const rangeValues=(token)=>{
+  if(token.includes(':')){
+   const [a,b]=token.split(':');const p1=cellToPosition(a),p2=cellToPosition(b);if(!p1||!p2)throw Error();
+   const out=[];for(let r=Math.min(p1.row,p2.row);r<=Math.max(p1.row,p2.row);r++)for(let col=Math.min(p1.col,p2.col);col<=Math.max(p1.col,p2.col);col++)out.push(calculateCell(positionToCell(col,r),cells,stack));return out;
+  }
+  return [calculateCell(token,cells,stack)];
+ };
+ try{
+  const fn=source.match(/^(SUM|AVERAGE|COUNT|MAX|MIN)\((.*)\)$/i);
+  if(fn){const args=fn[2].split(',').flatMap(x=>rangeValues(x.trim())).filter(x=>typeof x==='number'&&Number.isFinite(x));const name=fn[1].toUpperCase();if(name==='COUNT')return args.length;if(name==='SUM')return args.reduce((a,b)=>a+b,0);if(name==='AVERAGE')return args.length?args.reduce((a,b)=>a+b,0)/args.length:0;if(name==='MAX')return args.length?Math.max(...args):0;return args.length?Math.min(...args):0}
+  const expression=source.replace(/([A-Z]+[1-9][0-9]*)/gi,(ref)=>{const v=calculateCell(ref.toUpperCase(),cells,stack);if(typeof v!=='number'||!Number.isFinite(v))throw Error();return String(v)});
+  if(!/^[0-9+\-*/().\s]+$/.test(expression))throw Error();
+  const tokens=expression.match(/\d+(?:\.\d+)?|[()+\-*/]/g)||[];let i=0;
+  const primary=()=>{const t=tokens[i++];if(t==='('){const v=add();if(tokens[i++]!==')')throw Error();return v}if(t==='+')return primary();if(t==='-')return -primary();const n=Number(t);if(!Number.isFinite(n))throw Error();return n};
+  const mul=()=>{let v=primary();while(tokens[i]==='*'||tokens[i]==='/'){const op=tokens[i++],n=primary();v=op==='*'?v*n:v/n}return v};
+  const add=()=>{let v=mul();while(tokens[i]==='+'||tokens[i]==='-'){const op=tokens[i++],n=mul();v=op==='+'?v+n:v-n}return v};
+  const result=add();if(i!==tokens.length||!Number.isFinite(result))throw Error();return result;
+ }catch{return '#VALUE!'}
+}
 function ExcelEditor({onBack}){
  const [active,setActive]=React.useState('Home');
  const [menuOpen,setMenuOpen]=React.useState(false);
  const [selected,setSelected]=React.useState('A1');
  const [formula,setFormula]=React.useState('');
+ const [editingCell,setEditingCell]=React.useState(null);
  const [cells,setCells]=React.useState({});
  const [sheet,setSheet]=React.useState('Sheet1');
  const [notice,setNotice]=React.useState('');
@@ -65,6 +98,7 @@ function ExcelEditor({onBack}){
   if(name==='Formula Bar'){setShowFormula(v=>!v);return}
   if(name==='Filter'){setFilter(v=>!v);return}
   if(name==='New Workbook'){setCells({});setSelected('A1');setFormula('');notify('New workbook created');return}
+  if(name==='AutoSum'){const p=cellToPosition(selected);if(p){let start=p.row-1;while(start>1&&cells[positionToCell(p.col,start-1)]!==undefined&&cells[positionToCell(p.col,start-1)]!=='')start--;const end=p.row-1;const ref=end>=start?positionToCell(p.col,start)+':'+positionToCell(p.col,end):positionToCell(p.col,1)+':'+positionToCell(p.col,1);const value='=SUM('+ref+')';setFormula(value);updateCell(selected,value);notify('SUM formula added')}return}
   if(name==='Bold'||name==='Italic'||name==='Underline'){notify(name+' formatting selected');return}
   notify(name+' selected');
  };
@@ -74,7 +108,7 @@ function ExcelEditor({onBack}){
   <div className="workbookBar"><span className="fileBadge"><FileSpreadsheet size={16}/></span><input aria-label="Workbook name" defaultValue="Book1" /><span className="savedState">● Saved locally</span></div>
   <div className="ribbonStrip">{ribbonData[active].map(group=><div className="ribbonGroup" key={group.group}><div className="ribbonButtons">{group.items.map(([label,Icon])=><button key={label} className="ribbonAction" onClick={()=>action(label)} title={label}><Icon size={17}/><span>{label}</span></button>)}</div><small>{group.group}</small></div>)}</div>
   {showFormula&&<div className="formulaBar"><span className="cellRef">{selected}</span><span className="fx">fx</span><input value={formula} onChange={e=>{setFormula(e.target.value);updateCell(selected,e.target.value)}} placeholder="Enter value or formula"/></div>}
-  <div className="sheetScroll"><table className={showGrid?'sheetGrid':'sheetGrid noGrid'}><thead><tr><th className="corner"></th>{cols.map(c=><th key={c}>{colName(c)}</th>)}</tr></thead><tbody>{rows.map(r=><tr key={r}><th>{r}</th>{cols.map(c=>{const id=colName(c)+r;return <td key={id} className={selected===id?'selectedCell':''}><input aria-label={id} value={cells[id]||''} onFocus={()=>selectCell(id)} onChange={e=>updateCell(id,e.target.value)} onDoubleClick={()=>selectCell(id)}/></td>})}</tr>)}</tbody></table></div>
+  <div className="sheetScroll"><table className={showGrid?'sheetGrid':'sheetGrid noGrid'}><thead><tr><th className="corner"></th>{cols.map(c=><th key={c}>{colName(c)}</th>)}</tr></thead><tbody>{rows.map(r=><tr key={r}><th>{r}</th>{cols.map(c=>{const id=colName(c)+r;return <td key={id} className={selected===id?'selectedCell':''}><input aria-label={id} value={editingCell===id?(cells[id]||''):(cells[id]===undefined?'':String(calculateCell(id,cells)))} onFocus={()=>{selectCell(id);setEditingCell(id)}} onBlur={()=>setEditingCell(null)} onChange={e=>{updateCell(id,e.target.value);if(selected===id)setFormula(e.target.value)}} onDoubleClick={()=>{selectCell(id);setEditingCell(id)}}/></td>})}</tr>)}</tbody></table></div>
   <div className="sheetTabs"><button className="sheetNav" onClick={()=>notify('Previous sheet')}>‹</button><button className="sheetTab activeSheet">{sheet}</button><button className="addSheet" onClick={()=>{setSheet('Sheet'+(Number(sheet.replace('Sheet',''))+1||2));notify('New sheet added')}}><Plus size={17}/></button><span className="sheetStatus">Ready</span></div>
   <button className="ribbonMenuButton" onClick={()=>setMenuOpen(v=>!v)} aria-label="Open ribbon menu"><Grid2X2 size={24}/></button>
   {menuOpen&&<><div className="menuScrim" onClick={()=>setMenuOpen(false)}></div><div className="ribbonMenuPanel"><div className="menuPanelTitle">Workbook Menu <button onClick={()=>setMenuOpen(false)}><X size={18}/></button></div>{menus.map(([name,Icon])=><button key={name} className={'menuChoice '+(active===name?'chosen':'')} onClick={()=>{setActive(name);setMenuOpen(false)}}><Icon size={19}/><span>{name}</span>{active===name&&<Check size={16}/>}</button>)}</div></>}
