@@ -15,7 +15,9 @@ self.onmessage = (event) => {
       bookVBA:false,
       WTF:false
     });
-    const names = workbook.SheetNames || [];\n    const activeIndex = workbook.Workbook?.Views?.[0]?.activeTab;\n    const activeSheet = Number.isInteger(activeIndex) ? names[activeIndex] : names[0];
+    const names = workbook.SheetNames || [];
+    const activeIndex = workbook.Workbook?.Views?.[0]?.activeTab;
+    const activeSheet = Number.isInteger(activeIndex) ? names[activeIndex] : names[0];
     if (!names.length) throw new Error('কোনো Worksheet পাওয়া যায়নি');
     const sheets = {};
     names.forEach((name,index) => {
