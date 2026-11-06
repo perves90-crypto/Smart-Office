@@ -274,25 +274,64 @@ function ExcelEditor({onBack}){
  const importWorkbook=(file)=>{
   if(!file)return;
   if(file.size>50*1024*1024){notify('৫০ MB-এর বেশি ফাইল আপাতত সমর্থিত নয়');return}
+  const ext=(file.name.split('.').pop()||'').toLowerCase();
+  if(!['xlsx','xls','csv'].includes(ext)){notify('শুধু XLSX, XLS ও CSV ফাইল Open করা যাবে');return}
   setIsImporting(true);setNotice('ফাইল পড়া হচ্ছে…');
+  const applyWorkbook=(imported,activeName)=>{
+   const names=Object.keys(imported||{});
+   if(!names.length)throw new Error('ফাইলে কোনো Worksheet পাওয়া যায়নি');
+   const first=names.includes(activeName)?activeName:names[0];
+   const next=imported[first]?.cells||{};
+   setSheetStore(imported);setCells(next);setCellHistory([{},next]);setHistoryIndex(1);setCellStyles(imported[first]?.cellStyles||{});setSheet(first);setSelected('A1');setFormula(next.A1??'');setWorkbookName(file.name.replace(/\.(xlsx|xls|csv)$/i,''));setVisibleRows(100);setVisibleCols(10);notify('সফল! '+names.length+'টি Sheet Open হয়েছে');
+  };
+  const parseOnMainThread=(buffer)=>{
+   try{
+    setNotice('বিকল্প পদ্ধতিতে Excel ফাইল খোলা হচ্ছে…');
+    const workbook=XLSX.read(buffer,{type:'array',cellFormula:true,dense:false,cellStyles:false,cellNF:false,cellHTML:false,bookFiles:false,bookVBA:false,WTF:false});
+    const names=workbook.SheetNames||[],imported={};
+    if(!names.length)throw new Error('কোনো Worksheet পাওয়া যায়নি');
+    names.forEach(name=>{
+     const ws=workbook.Sheets[name]||{},cells={};
+     for(const address of Object.keys(ws)){
+      if(!/^[A-Z]{1,3}[1-9][0-9]*$/.test(address))continue;
+      const cell=ws[address];if(!cell)continue;
+      if(cell.f)cells[address]='='+cell.f;
+      else if(cell.v!==undefined&&cell.v!==null)cells[address]=typeof cell.v==='number'?cell.v:String(cell.v);
+     }
+     imported[name]={cells,cellStyles:{}};
+    });
+    const activeIndex=workbook.Workbook?.Views?.[0]?.activeTab;
+    applyWorkbook(imported,Number.isInteger(activeIndex)?names[activeIndex]:names[0]);
+   }catch(error){notify('ফাইল Open হয়নি: '+(error?.message||'Excel data পড়া যায়নি'))}
+   finally{setIsImporting(false)}
+  };
   const reader=new FileReader();
   reader.onload=event=>{
-   const worker=new Worker(new URL('./xlsx.worker.js',import.meta.url),{type:'module'});
-   worker.onmessage=e=>{
-    const msg=e.data;
-    if(msg.type==='progress'){setNotice(msg.message);return}
-    worker.terminate();setIsImporting(false);
-    if(msg.type==='error'){notify('ফাইল ওপেন হয়নি: '+msg.message);return}
-    const imported=msg.sheets||{},names=Object.keys(imported);
-    if(!names.length){notify('ফাইলে কোনো Worksheet পাওয়া যায়নি');return}
-    const first=names[0],next=imported[first].cells||{};
-    setSheetStore(imported);setCells(next);setCellHistory([{},next]);setHistoryIndex(1);setCellStyles({});setSheet(first);setSelected('A1');setFormula(next.A1||'');setWorkbookName(file.name.replace(/\\.(xlsx|xls|csv)$/i,''));setVisibleRows(100);setVisibleCols(10);notify('সফল! '+names.length+'টি Sheet দ্রুত Open হয়েছে');
-   };
-   worker.onerror=()=>{worker.terminate();setIsImporting(false);notify('ফাইল প্রসেস করা যায়নি। আবার চেষ্টা করুন')};
-   worker.postMessage({buffer:event.target.result},[event.target.result]);
+   const buffer=event.target.result;
+   let worker=null,finished=false,timer=null;
+   const fallback=()=>{if(finished)return;finished=true;if(timer)clearTimeout(timer);try{worker?.terminate()}catch{}parseOnMainThread(buffer)};
+   try{
+    worker=new Worker(new URL('./xlsx.worker.js',import.meta.url),{type:'module'});
+    worker.onmessage=e=>{
+     const msg=e.data||{};
+     if(msg.type==='progress'){setNotice(msg.message||'Excel ফাইল প্রস্তুত হচ্ছে…');return}
+     if(finished)return;
+     if(msg.type==='error'){fallback();return}
+     if(msg.type==='success'){
+      finished=true;if(timer)clearTimeout(timer);worker.terminate();
+      try{applyWorkbook(msg.sheets,msg.activeSheet)}catch{parseOnMainThread(buffer)}
+      finally{setIsImporting(false)}
+     }
+    };
+    worker.onerror=fallback;
+    worker.onmessageerror=fallback;
+    timer=setTimeout(fallback,25000);
+    const copy=buffer.slice(0);
+    worker.postMessage({buffer:copy},[copy]);
+   }catch{fallback()}
   };
-  reader.onerror=()=>{setIsImporting(false);notify('ফাইল পড়া যায়নি')};
-  reader.readAsArrayBuffer(file);
+  reader.onerror=()=>{setIsImporting(false);notify('ফাইল পড়া যায়নি। আবার চেষ্টা করুন')};
+  try{reader.readAsArrayBuffer(file)}catch(error){setIsImporting(false);notify('ফাইল পড়া যায়নি: '+(error?.message||''))}
  };
  const exportWorkbook=(format='xlsx')=>{
   try{const all={...sheetStore,[sheet]:{cells,cellStyles}};const wb=XLSX.utils.book_new();for(const [sheetName,data] of Object.entries(all)){let maxRow=0,maxCol=0;for(const key of Object.keys(data.cells||{})){const p=cellToPosition(key);if(p){maxRow=Math.max(maxRow,p.row);maxCol=Math.max(maxCol,p.col)}}const aoa=Array.from({length:Math.max(1,maxRow)},()=>Array(Math.max(1,maxCol)).fill(''));const ws=XLSX.utils.aoa_to_sheet(aoa);for(const [key,value] of Object.entries(data.cells||{})){if(typeof value==='string'&&value.startsWith('='))ws[key]={t:'n',f:value.slice(1)};else ws[key]={v:value,t:typeof value==='number'?'n':'s'};}ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(0,maxRow-1),c:Math.max(0,maxCol-1)}});XLSX.utils.book_append_sheet(wb,ws,sheetName.slice(0,31)||'Sheet1');}const filename=(workbookName.trim()||'Book1')+(format==='csv'?'.csv':'.xlsx');if(format==='csv'){const ws=wb.Sheets[sheet];const csv=XLSX.utils.sheet_to_csv(ws);const blob=new Blob(['\\uFEFF',csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);}else XLSX.writeFile(wb,filename);notify('Workbook downloaded');}catch(error){notify('Export failed: '+error.message)}
