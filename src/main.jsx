@@ -206,7 +206,8 @@ function ExcelEditor({onBack}){
  const [rangeStart,setRangeStart]=React.useState(null);
  const [rangeEnd,setRangeEnd]=React.useState(null);
  const [isSelectingRange,setIsSelectingRange]=React.useState(false);
- const [visibleRows,setVisibleRows]=React.useState(100);\n const [visibleCols,setVisibleCols]=React.useState(10);
+ const [visibleRows,setVisibleRows]=React.useState(100);
+ const [visibleCols,setVisibleCols]=React.useState(10);
  const [sheetZoom,setSheetZoom]=React.useState(1);
  const touchPoints=React.useRef(new Map());
  const touchGesture=React.useRef(null);
