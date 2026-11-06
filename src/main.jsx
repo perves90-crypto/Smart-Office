@@ -187,6 +187,9 @@ function calculateFormula(source,cells,stack=[]){
 function loadSavedWorkbook(){try{const raw=localStorage.getItem('smartoffice-workbook');if(!raw)return null;const data=JSON.parse(raw);return data&&typeof data==='object'?data:null}catch{return null}}
 function ExcelEditor({onBack}){
  const [initialWorkbook]=React.useState(loadSavedWorkbook);
+ const [isRestoring,setIsRestoring]=React.useState(true);
+ const [isImporting,setIsImporting]=React.useState(false);
+ React.useEffect(()=>{let live=true;try{const req=indexedDB.open('SmartOfficeWorkbookDB',1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('workbooks'))req.result.createObjectStore('workbooks')};req.onsuccess=()=>{const db=req.result,tx=db.transaction('workbooks','readonly'),get=tx.objectStore('workbooks').get('current');get.onsuccess=()=>{if(live&&get.result){const d=get.result;setSheetStore(d.sheets||{});setCells(d.cells||{});setCellStyles(d.cellStyles||{});setSheet(d.sheet||'Sheet1');setWorkbookName(d.workbookName||'Book1');setChart(d.chart||null);setPivot(d.pivot||null)}if(live)setIsRestoring(false);db.close()};get.onerror=()=>{if(live)setIsRestoring(false);db.close()}};req.onerror=()=>{if(live)setIsRestoring(false)}}catch{setIsRestoring(false)}return()=>{live=false}},[]);
  const [active,setActive]=React.useState('Home');
  const [menuOpen,setMenuOpen]=React.useState(false);
  const [selected,setSelected]=React.useState('A1');
@@ -219,7 +222,7 @@ function ExcelEditor({onBack}){
  const [filter,setFilter]=React.useState(false);
  const colName=n=>{let s='';while(n>0){let r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}return s};
  const notify=t=>{setNotice(t);setTimeout(()=>setNotice(''),1800)};
- React.useEffect(()=>{const timer=setTimeout(()=>{try{const all={...sheetStore,[sheet]:{cells,cellStyles}};setSheetStore(all);localStorage.setItem('smartoffice-workbook',JSON.stringify({sheets:all,cells,cellStyles,sheet,workbookName,chart,pivot,savedAt:new Date().toISOString()}));}catch{notify('Device storage is full; export your workbook to keep a copy')}},350);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName,chart,pivot]);
+ React.useEffect(()=>{if(isRestoring)return;const timer=setTimeout(()=>{const all={...sheetStore,[sheet]:{cells,cellStyles}};setSheetStore(all);const data={sheets:all,cells,cellStyles,sheet,workbookName,chart,pivot,savedAt:new Date().toISOString()};try{const request=indexedDB.open('SmartOfficeWorkbookDB',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('workbooks'))request.result.createObjectStore('workbooks')};request.onsuccess=()=>{const db=request.result,tx=db.transaction('workbooks','readwrite');tx.objectStore('workbooks').put(data,'current');tx.oncomplete=()=>db.close();tx.onerror=()=>{db.close();notify('Workbook auto-save failed. Please export a backup')}};request.onerror=()=>notify('Device storage unavailable. Please export a backup')}catch{notify('Device storage unavailable. Please export a backup')}},500);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName,chart,pivot,isRestoring]);
  const selectCell=(id)=>{setSelected(id);setFormula(cells[id]||'');setSelectionBand(null)};
  const selectWholeColumn=(col)=>{const id=positionToCell(col,1);setSelected(id);setFormula(cells[id]||'');setSelectionBand({axis:'col',index:col});notify(colName(col)+' কলাম সম্পূর্ণ সিলেক্ট হয়েছে');};
  const selectWholeRow=(row)=>{const id=positionToCell(1,row);setSelected(id);setFormula(cells[id]||'');setSelectionBand({axis:'row',index:row});notify(row+' নম্বর Row সম্পূর্ণ সিলেক্ট হয়েছে');};
@@ -269,7 +272,27 @@ function ExcelEditor({onBack}){
   return ()=>window.removeEventListener('keydown',onKeyDown);
  });
  const importWorkbook=(file)=>{
-  const reader=new FileReader();reader.onload=(event)=>{try{const data=new Uint8Array(event.target.result);const wb=XLSX.read(data,{type:'array',cellFormula:true});const names=wb.SheetNames;if(!names.length)throw Error('No worksheet');const imported={};for(const name of names){const ws=wb.Sheets[name],range=XLSX.utils.decode_range(ws['!ref']||'A1:A1'),next={};for(let r=range.s.r;r<=range.e.r;r++){for(let col=range.s.c;col<=range.e.c;col++){const address=XLSX.utils.encode_cell({r,c:col}),cell=ws[address];if(!cell)continue;next[address]=cell.f?'='+cell.f:(cell.v===undefined?'':String(cell.v));}}imported[name]={cells:next,cellStyles:{}};}const first=names[0],next=imported[first].cells;setSheetStore(imported);setCells(next);setCellHistory([{},next]);setHistoryIndex(1);setCellStyles({});setSheet(first);setSelected('A1');setFormula(next.A1||'');setWorkbookName(file.name.replace(/\\.(xlsx|xls|csv)$/i,''));notify('All worksheets imported');}catch(error){notify('Import failed: '+error.message)}};reader.onerror=()=>notify('Could not read file');reader.readAsArrayBuffer(file);
+  if(!file)return;
+  if(file.size>50*1024*1024){notify('৫০ MB-এর বেশি ফাইল আপাতত সমর্থিত নয়');return}
+  setIsImporting(true);setNotice('ফাইল পড়া হচ্ছে…');
+  const reader=new FileReader();
+  reader.onload=event=>{
+   const worker=new Worker(new URL('./xlsx.worker.js',import.meta.url),{type:'module'});
+   worker.onmessage=e=>{
+    const msg=e.data;
+    if(msg.type==='progress'){setNotice(msg.message);return}
+    worker.terminate();setIsImporting(false);
+    if(msg.type==='error'){notify('ফাইল ওপেন হয়নি: '+msg.message);return}
+    const imported=msg.sheets||{},names=Object.keys(imported);
+    if(!names.length){notify('ফাইলে কোনো Worksheet পাওয়া যায়নি');return}
+    const first=names[0],next=imported[first].cells||{};
+    setSheetStore(imported);setCells(next);setCellHistory([{},next]);setHistoryIndex(1);setCellStyles({});setSheet(first);setSelected('A1');setFormula(next.A1||'');setWorkbookName(file.name.replace(/\\.(xlsx|xls|csv)$/i,''));setVisibleRows(100);setVisibleCols(10);notify('সফল! '+names.length+'টি Sheet দ্রুত Open হয়েছে');
+   };
+   worker.onerror=()=>{worker.terminate();setIsImporting(false);notify('ফাইল প্রসেস করা যায়নি। আবার চেষ্টা করুন')};
+   worker.postMessage({buffer:event.target.result},[event.target.result]);
+  };
+  reader.onerror=()=>{setIsImporting(false);notify('ফাইল পড়া যায়নি')};
+  reader.readAsArrayBuffer(file);
  };
  const exportWorkbook=(format='xlsx')=>{
   try{const all={...sheetStore,[sheet]:{cells,cellStyles}};const wb=XLSX.utils.book_new();for(const [sheetName,data] of Object.entries(all)){let maxRow=0,maxCol=0;for(const key of Object.keys(data.cells||{})){const p=cellToPosition(key);if(p){maxRow=Math.max(maxRow,p.row);maxCol=Math.max(maxCol,p.col)}}const aoa=Array.from({length:Math.max(1,maxRow)},()=>Array(Math.max(1,maxCol)).fill(''));const ws=XLSX.utils.aoa_to_sheet(aoa);for(const [key,value] of Object.entries(data.cells||{})){if(typeof value==='string'&&value.startsWith('='))ws[key]={t:'n',f:value.slice(1)};else ws[key]={v:value,t:typeof value==='number'?'n':'s'};}ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(0,maxRow-1),c:Math.max(0,maxCol-1)}});XLSX.utils.book_append_sheet(wb,ws,sheetName.slice(0,31)||'Sheet1');}const filename=(workbookName.trim()||'Book1')+(format==='csv'?'.csv':'.xlsx');if(format==='csv'){const ws=wb.Sheets[sheet];const csv=XLSX.utils.sheet_to_csv(ws);const blob=new Blob(['\\uFEFF',csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);}else XLSX.writeFile(wb,filename);notify('Workbook downloaded');}catch(error){notify('Export failed: '+error.message)}
@@ -371,7 +394,7 @@ function ExcelEditor({onBack}){
  };
  const usedMaxRow=Object.keys(cells).reduce((m,key)=>Math.max(m,cellToPosition(key)?.row||0),0);
  const usedMaxCol=Object.keys(cells).reduce((m,key)=>Math.max(m,cellToPosition(key)?.col||0),0);
- const rows=Array.from({length:Math.max(visibleRows,usedMaxRow+50)},(_,i)=>i+1),cols=Array.from({length:Math.max(visibleCols,usedMaxCol+20)},(_,i)=>i+1);
+ const rows=Array.from({length:visibleRows},(_,i)=>i+1),cols=Array.from({length:visibleCols},(_,i)=>i+1);
  return <div className="excelApp">
   <header className="excelTop"><button className="backBtn" onClick={onBack}>‹</button><div className="excelTitle"><b><Table2 size={19}/> Smart Excel</b><small>Workbook • {sheet}</small></div><button className="topIcon" onClick={()=>action('Save')}><Save size={19}/></button><button className="topIcon" onClick={()=>notify('More workbook options')}><Settings size={19}/></button></header>
   <div className="workbookBar"><span className="fileBadge"><FileSpreadsheet size={16}/></span><input aria-label="Workbook name" value={workbookName} onChange={e=>setWorkbookName(e.target.value)} /><span className="savedState">● Saved locally</span></div>
@@ -385,6 +408,7 @@ function ExcelEditor({onBack}){
   <div className="sheetTabs"><button className="sheetNav" onClick={()=>notify('Previous sheet')}>‹</button><button className="sheetTab activeSheet" onClick={renameSheet} onContextMenu={e=>{e.preventDefault();deleteSheet()}} title="Tap to rename; long/right click to delete">{sheet}</button>{Object.keys({...sheetStore,[sheet]:{cells,cellStyles}}).filter(n=>n!==sheet).map(n=><button key={n} className="sheetTab" onClick={()=>switchSheet(n)}>{n}</button>)}<button className="addSheet" onClick={addSheet}><Plus size={17}/></button><button className="sheetNav" onClick={deleteSheet} title="Delete current sheet"><X size={15}/></button><span className="sheetStatus"><button onClick={()=>setSheetZoom(v=>Math.max(.6,Number((v-.1).toFixed(2))))}>−</button> {Math.round(sheetZoom*100)}% <button onClick={()=>setSheetZoom(v=>Math.min(2.5,Number((v+.1).toFixed(2))))}>+</button> Ready</span></div>
   <button className="ribbonMenuButton" onClick={()=>setMenuOpen(v=>!v)} aria-label="Open ribbon menu"><Grid2X2 size={24}/></button>
   {menuOpen&&<><div className="menuScrim" onClick={()=>setMenuOpen(false)}></div><div className="ribbonMenuPanel"><div className="menuPanelTitle">Workbook Menu <button onClick={()=>setMenuOpen(false)}><X size={18}/></button></div>{menus.map(([name,Icon])=><button key={name} className={'menuChoice '+(active===name?'chosen':'')} onClick={()=>{setActive(name);setMenuOpen(false)}}><Icon size={19}/><span>{name}</span>{active===name&&<Check size={16}/>}</button>)}</div></>}
+  {isImporting&&<div className="excelToast">বড় Excel ফাইল প্রসেস হচ্ছে… অনুগ্রহ করে অপেক্ষা করুন</div>}
   <input id="excelFileInput" type="file" hidden accept=".xls,.xlsx,.csv" onChange={e=>{if(e.target.files?.[0])importWorkbook(e.target.files[0]);e.target.value=''}}/>
   {notice&&<div className="excelToast">{notice}</div>}
  </div>
