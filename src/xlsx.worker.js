@@ -15,7 +15,7 @@ self.onmessage = (event) => {
       bookVBA:false,
       WTF:false
     });
-    const names = workbook.SheetNames || [];
+    const names = workbook.SheetNames || [];\n    const activeIndex = workbook.Workbook?.Views?.[0]?.activeTab;\n    const activeSheet = Number.isInteger(activeIndex) ? names[activeIndex] : names[0];
     if (!names.length) throw new Error('কোনো Worksheet পাওয়া যায়নি');
     const sheets = {};
     names.forEach((name,index) => {
@@ -31,7 +31,7 @@ self.onmessage = (event) => {
       }
       sheets[name] = {cells,cellStyles:{}};
     });
-    self.postMessage({type:'success',sheets});
+    self.postMessage({type:'success',sheets,activeSheet});
   } catch (error) {
     self.postMessage({type:'error',message:error?.message || 'Unknown error'});
   }
