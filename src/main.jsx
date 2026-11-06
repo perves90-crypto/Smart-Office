@@ -5,7 +5,7 @@ import './style.css';
 
 const ribbonData = {
  Home: [
-  {group:'Clipboard',items:[['Paste',Clipboard],['Scissors',Scissors],['Copy',Copy],['Format Painter',Paintbrush]]},
+  {group:'Clipboard',items:[['Undo',Undo2],['Redo',Redo2],['Paste',Clipboard],['Cut',Scissors],['Copy',Copy],['Format Painter',Paintbrush]]},
   {group:'Font',items:[['Font',Type],['Bold',Bold],['Italic',Italic],['Underline',Underline],['Font Color',Type]]},
   {group:'Alignment',items:[['Align Left',AlignLeft],['Center',AlignCenter],['Align Right',AlignRight],['Wrap Text',WrapText],['Merge Cells',Merge]]},
   {group:'Number',items:[['Number Format',Calculator],['Currency',Coins],['Percent',Percent],['Date',CalendarDays]]},
@@ -191,6 +191,9 @@ function ExcelEditor({onBack}){
  const [editingCell,setEditingCell]=React.useState(null);
  const [cells,setCells]=React.useState({});
  const [cellStyles,setCellStyles]=React.useState({});
+ const [cellHistory,setCellHistory]=React.useState([{}]);
+ const [historyIndex,setHistoryIndex]=React.useState(0);
+ const [clipboard,setClipboard]=React.useState(null);
  const [sheet,setSheet]=React.useState('Sheet1');
  const [notice,setNotice]=React.useState('');
  const [showFormula,setShowFormula]=React.useState(true);
@@ -199,17 +202,57 @@ function ExcelEditor({onBack}){
  const colName=n=>{let s='';while(n>0){let r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}return s};
  const notify=t=>{setNotice(t);setTimeout(()=>setNotice(''),1800)};
  const selectCell=(id)=>{setSelected(id);setFormula(cells[id]||'')};
- const updateCell=(id,value)=>setCells(p=>({...p,[id]:value}));
+ const updateCell=(id,value)=>{
+  const next={...cells,[id]:value};
+  setCells(next);
+  setCellHistory(h=>[...h.slice(0,historyIndex+1),next].slice(-101));
+  setHistoryIndex(i=>Math.min(i+1,100));
+ };
+ const undo=()=>{if(historyIndex<=0){notify('Nothing to undo');return}const i=historyIndex-1;setHistoryIndex(i);setCells(cellHistory[i]||{});setFormula((cellHistory[i]||{})[selected]||'');notify('Undo complete')};
+ const redo=()=>{if(historyIndex>=cellHistory.length-1){notify('Nothing to redo');return}const i=historyIndex+1;setHistoryIndex(i);setCells(cellHistory[i]||{});setFormula((cellHistory[i]||{})[selected]||'');notify('Redo complete')};
+ const copyCell=async(cut=false)=>{
+  const item={value:cells[selected]??'',style:cellStyles[selected]||{}};
+  setClipboard(item);
+  try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(String(item.value))}catch{}
+  if(cut)updateCell(selected,'');
+  notify(cut?'Cell cut':'Cell copied');
+ };
+ const pasteCell=()=>{
+  if(!clipboard){notify('Copy a cell first');return}
+  updateCell(selected,clipboard.value);
+  if(Object.keys(clipboard.style||{}).length)setCellStyles(p=>({...p,[selected]:{...clipboard.style}}));
+  setFormula(clipboard.value);
+  notify('Cell pasted');
+ };
  const updateStyle=(patch)=>setCellStyles(p=>({...p,[selected]:{...(p[selected]||{}),...patch}}));
  const toggleStyle=(key)=>updateStyle({[key]:!cellStyles[selected]?.[key]});
+ React.useEffect(()=>{
+  const onKeyDown=e=>{
+   if(!(e.ctrlKey||e.metaKey))return;
+   const key=e.key.toLowerCase();
+   if(key==='z'){e.preventDefault();undo()}
+   else if(key==='y'){e.preventDefault();redo()}
+   else if(key==='c'){e.preventDefault();copyCell(false)}
+   else if(key==='x'){e.preventDefault();copyCell(true)}
+   else if(key==='v'){e.preventDefault();pasteCell()}
+  };
+  window.addEventListener('keydown',onKeyDown);
+  return ()=>window.removeEventListener('keydown',onKeyDown);
+ });
  const action=(name)=>{
+  if(name==='Undo'){undo();return}
+  if(name==='Redo'){redo();return}
+  if(name==='Copy'){copyCell(false);return}
+  if(name==='Cut'){copyCell(true);return}
+  if(name==='Paste'){pasteCell();return}
+  if(name==='Format Painter'){const style=cellStyles[selected]||{};setClipboard({value:'',style});notify('Format copied — select Paste to apply');return}
   if(name==='Save'||name==='Save As'){notify('Workbook save option is being prepared');return}
   if(name==='Open'){document.getElementById('excelFileInput')?.click();return}
   if(name==='Export PDF'||name==='Print'){notify(name+' option selected');return}
   if(name==='Gridlines'){setShowGrid(v=>!v);return}
   if(name==='Formula Bar'){setShowFormula(v=>!v);return}
   if(name==='Filter'){setFilter(v=>!v);return}
-  if(name==='New Workbook'){setCells({});setSelected('A1');setFormula('');notify('New workbook created');return}
+  if(name==='New Workbook'){setCells({});setCellHistory([{}]);setHistoryIndex(0);setCellStyles({});setSelected('A1');setFormula('');notify('New workbook created');return}
   if(name==='AutoSum'){const p=cellToPosition(selected);if(p){let start=p.row-1;while(start>1&&cells[positionToCell(p.col,start-1)]!==undefined&&cells[positionToCell(p.col,start-1)]!=='')start--;const end=p.row-1;const ref=end>=start?positionToCell(p.col,start)+':'+positionToCell(p.col,end):positionToCell(p.col,1)+':'+positionToCell(p.col,1);const value='=SUM('+ref+')';setFormula(value);updateCell(selected,value);notify('SUM formula added')}return}
   if(name==='Bold'){toggleStyle('bold');return}
   if(name==='Italic'){toggleStyle('italic');return}
