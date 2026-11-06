@@ -211,7 +211,7 @@ function ExcelEditor({onBack}){
  const undo=()=>{if(historyIndex<=0){notify('Nothing to undo');return}const i=historyIndex-1;setHistoryIndex(i);setCells(cellHistory[i]||{});setFormula((cellHistory[i]||{})[selected]||'');notify('Undo complete')};
  const redo=()=>{if(historyIndex>=cellHistory.length-1){notify('Nothing to redo');return}const i=historyIndex+1;setHistoryIndex(i);setCells(cellHistory[i]||{});setFormula((cellHistory[i]||{})[selected]||'');notify('Redo complete')};
  const copyCell=async(cut=false)=>{
-  const item={value:cells[selected]??'',style:cellStyles[selected]||{}};
+  const item={kind:'cell',value:cells[selected]??'',style:cellStyles[selected]||{}};
   setClipboard(item);
   try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(String(item.value))}catch{}
   if(cut)updateCell(selected,'');
@@ -219,6 +219,10 @@ function ExcelEditor({onBack}){
  };
  const pasteCell=()=>{
   if(!clipboard){notify('Copy a cell first');return}
+  if(clipboard.kind==='style'){
+   setCellStyles(p=>({...p,[selected]:{...clipboard.style}}));
+   notify('Format applied');return;
+  }
   updateCell(selected,clipboard.value);
   if(Object.keys(clipboard.style||{}).length)setCellStyles(p=>({...p,[selected]:{...clipboard.style}}));
   setFormula(clipboard.value);
@@ -245,7 +249,7 @@ function ExcelEditor({onBack}){
   if(name==='Copy'){copyCell(false);return}
   if(name==='Cut'){copyCell(true);return}
   if(name==='Paste'){pasteCell();return}
-  if(name==='Format Painter'){const style=cellStyles[selected]||{};setClipboard({value:'',style});notify('Format copied — select Paste to apply');return}
+  if(name==='Format Painter'){const style=cellStyles[selected]||{};setClipboard({kind:'style',value:'',style});notify('Format copied — select Paste to apply');return}
   if(name==='Save'||name==='Save As'){notify('Workbook save option is being prepared');return}
   if(name==='Open'){document.getElementById('excelFileInput')?.click();return}
   if(name==='Export PDF'||name==='Print'){notify(name+' option selected');return}
