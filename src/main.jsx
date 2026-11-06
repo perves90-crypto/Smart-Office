@@ -346,7 +346,8 @@ function ExcelEditor({onBack}){
   if(name==='Date'){updateStyle({numberFormat:'date'});return}
   notify(name+' selected');
  };
- const usedMaxRow=Object.keys(cells).reduce((m,key)=>Math.max(m,cellToPosition(key)?.row||0),0);\n const usedMaxCol=Object.keys(cells).reduce((m,key)=>Math.max(m,cellToPosition(key)?.col||0),0);
+ const usedMaxRow=Object.keys(cells).reduce((m,key)=>Math.max(m,cellToPosition(key)?.row||0),0);
+ const usedMaxCol=Object.keys(cells).reduce((m,key)=>Math.max(m,cellToPosition(key)?.col||0),0);
  const rows=Array.from({length:Math.max(visibleRows,usedMaxRow+50)},(_,i)=>i+1),cols=Array.from({length:Math.max(visibleCols,usedMaxCol+20)},(_,i)=>i+1);
  return <div className="excelApp">
   <header className="excelTop"><button className="backBtn" onClick={onBack}>‹</button><div className="excelTitle"><b><Table2 size={19}/> Smart Excel</b><small>Workbook • {sheet}</small></div><button className="topIcon" onClick={()=>action('Save')}><Save size={19}/></button><button className="topIcon" onClick={()=>notify('More workbook options')}><Settings size={19}/></button></header>
