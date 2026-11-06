@@ -1,11 +1,11 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
-import {FileText,Table2,Presentation,File,FolderOpen,Clock3,Settings,ShieldCheck,Grid2X2,Home,Folder,Eye,Plus,Database,ClipboardCheck,Save,Printer,Undo2,Redo2,Copy,Cut,Clipboard,Paintbrush,Type,Bold,Italic,Underline,AlignLeft,AlignCenter,AlignRight,WrapText,Merge,Filter,ArrowDownUp,Search,Check,MessageSquare,Lock,BarChart3,Image,Link,Calculator,Percent,Coins,CalendarDays,SortAsc,FileSpreadsheet,X,ChevronDown} from 'lucide-react';
+import {FileText,Table2,Presentation,File,FolderOpen,Clock3,Settings,ShieldCheck,Grid2X2,Home,Folder,Eye,Plus,Database,ClipboardCheck,Save,Printer,Undo2,Redo2,Copy,Scissors,Clipboard,Paintbrush,Type,Bold,Italic,Underline,AlignLeft,AlignCenter,AlignRight,WrapText,Merge,Filter,ArrowDownUp,Search,Check,MessageSquare,Lock,BarChart3,Image,Link,Calculator,Percent,Coins,CalendarDays,SortAsc,FileSpreadsheet,X,ChevronDown} from 'lucide-react';
 import './style.css';
 
 const ribbonData = {
  Home: [
-  {group:'Clipboard',items:[['Paste',Clipboard],['Cut',Cut],['Copy',Copy],['Format Painter',Paintbrush]]},
+  {group:'Clipboard',items:[['Paste',Clipboard],['Scissors',Scissors],['Copy',Copy],['Format Painter',Paintbrush]]},
   {group:'Font',items:[['Font',Type],['Bold',Bold],['Italic',Italic],['Underline',Underline],['Font Color',Type]]},
   {group:'Alignment',items:[['Align Left',AlignLeft],['Center',AlignCenter],['Align Right',AlignRight],['Wrap Text',WrapText],['Merge Cells',Merge]]},
   {group:'Number',items:[['Number Format',Calculator],['Currency',Coins],['Percent',Percent],['Date',CalendarDays]]},
