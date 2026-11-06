@@ -201,12 +201,14 @@ function ExcelEditor({onBack}){
  const [sheet,setSheet]=React.useState(()=>initialWorkbook?.sheet||'Sheet1');
  const [workbookName,setWorkbookName]=React.useState(()=>initialWorkbook?.workbookName||'Book1');
  const [notice,setNotice]=React.useState('');
+ const [chart,setChart]=React.useState(()=>initialWorkbook?.chart||null);
+ const [pivot,setPivot]=React.useState(()=>initialWorkbook?.pivot||null);
  const [showFormula,setShowFormula]=React.useState(true);
  const [showGrid,setShowGrid]=React.useState(true);
  const [filter,setFilter]=React.useState(false);
  const colName=n=>{let s='';while(n>0){let r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}return s};
  const notify=t=>{setNotice(t);setTimeout(()=>setNotice(''),1800)};
- React.useEffect(()=>{const timer=setTimeout(()=>{try{const all={...sheetStore,[sheet]:{cells,cellStyles}};setSheetStore(all);localStorage.setItem('smartoffice-workbook',JSON.stringify({sheets:all,cells,cellStyles,sheet,workbookName,savedAt:new Date().toISOString()}));}catch{notify('Device storage is full; export your workbook to keep a copy')}},350);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName]);
+ React.useEffect(()=>{const timer=setTimeout(()=>{try{const all={...sheetStore,[sheet]:{cells,cellStyles}};setSheetStore(all);localStorage.setItem('smartoffice-workbook',JSON.stringify({sheets:all,cells,cellStyles,sheet,workbookName,chart,pivot,savedAt:new Date().toISOString()}));}catch{notify('Device storage is full; export your workbook to keep a copy')}},350);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName,chart,pivot]);
  const selectCell=(id)=>{setSelected(id);setFormula(cells[id]||'')};
  const updateCell=(id,value)=>{
   const next={...cells,[id]:value};
@@ -263,6 +265,25 @@ function ExcelEditor({onBack}){
  const switchSheet=(name)=>{if(name===sheet)return;const all={...sheetStore,[sheet]:{cells,cellStyles}};const next=all[name]||{cells:{},cellStyles:{}};setSheetStore(all);setCells(next.cells);setCellStyles(next.cellStyles);setCellHistory([next.cells]);setHistoryIndex(0);setSheet(name);setSelected('A1');setFormula(next.cells.A1||'');};
  const renameSheet=()=>{const name=window.prompt('Enter new sheet name:',sheet);if(!name||name===sheet)return;if(name.length>31||/[\\\\/?*\\[\\]:]/.test(name)){notify('Sheet name is invalid (max 31 characters)');return}if(sheetStore[name]){notify('That sheet name already exists');return}const all={...sheetStore,[sheet]:{cells,cellStyles}};all[name]=all[sheet];delete all[sheet];setSheetStore(all);setSheet(name);notify('Sheet renamed');};
  const deleteSheet=()=>{const names=Object.keys({...sheetStore,[sheet]:{cells,cellStyles}});if(names.length<=1){notify('At least one sheet is required');return}if(!window.confirm('Delete sheet '+sheet+'?'))return;const all={...sheetStore,[sheet]:{cells,cellStyles}};delete all[sheet];const nextName=Object.keys(all)[0],next=all[nextName];setSheetStore(all);setSheet(nextName);setCells(next.cells);setCellStyles(next.cellStyles);setCellHistory([next.cells]);setHistoryIndex(0);setSelected('A1');setFormula(next.cells.A1||'');notify('Sheet deleted');};
+
+ const readRange=(rangeText)=>{
+  const parts=String(rangeText||'').toUpperCase().split(':');
+  if(parts.length!==2)throw Error('Use a range like A1:B6');
+  const start=cellToPosition(parts[0]),end=cellToPosition(parts[1]);
+  if(!start||!end||end.row<start.row||end.col<start.col)throw Error('Invalid data range');
+  const matrix=[];
+  for(let r=start.row;r<=end.row;r++){const row=[];for(let c=start.col;c<=end.col;c++){const ref=positionToCell(c,r);row.push(cells[ref]===undefined?'':String(calculateCell(ref,cells)));}matrix.push(row);}
+  if(matrix.length<2||matrix[0].length<2)throw Error('Select at least two columns and two rows');
+  return matrix;
+ };
+ const insertChart=(type)=>{
+  try{const range=window.prompt('Enter chart data range (example: A1:B6):','A1:B6');if(!range)return;const matrix=readRange(range);const labels=matrix.slice(1).map(row=>row[0]||'');const series=matrix[0].slice(1).map((name,i)=>({name:name||'Series '+(i+1),values:matrix.slice(1).map(row=>Number(row[i+1])||0)}));setChart({type,range,labels,series,title:type+' Chart'});notify(type+' chart inserted');}
+  catch(error){notify(error.message)}
+ };
+ const createPivot=()=>{
+  try{const range=window.prompt('Enter source data range (first row must contain headings):','A1:B10');if(!range)return;const matrix=readRange(range);const categoryIndex=Number(window.prompt('Category column number within range (1 = first column):','1'))-1;const valueIndex=Number(window.prompt('Value column number within range (2 = second column):','2'))-1;if(!Number.isInteger(categoryIndex)||!Number.isInteger(valueIndex)||categoryIndex<0||valueIndex<0||categoryIndex>=matrix[0].length||valueIndex>=matrix[0].length||categoryIndex===valueIndex)throw Error('Choose two different valid columns');const totals={};for(const row of matrix.slice(1)){const key=row[categoryIndex]||'(blank)';totals[key]=(totals[key]||0)+(Number(row[valueIndex])||0);}const rows=Object.entries(totals).map(([category,total])=>({category,total})).sort((a,b)=>a.category.localeCompare(b.category));setPivot({range,category:matrix[0][categoryIndex],value:matrix[0][valueIndex],rows});notify('Pivot summary created');}
+  catch(error){notify(error.message)}
+ };
  const action=(name)=>{
   if(name==='Undo'){undo();return}
   if(name==='Redo'){redo();return}
@@ -278,6 +299,10 @@ function ExcelEditor({onBack}){
   if(name==='Formula Bar'){setShowFormula(v=>!v);return}
   if(name==='Filter'){setFilter(v=>!v);return}
   if(name==='New Workbook'){setCells({});setCellHistory([{}]);setHistoryIndex(0);setCellStyles({});setSheetStore({'Sheet1':{cells:{},cellStyles:{}}});setSheet('Sheet1');setSelected('A1');setFormula('');notify('New workbook created');return}
+  if(name==='Column Chart'){insertChart('Column');return}
+  if(name==='Line Chart'){insertChart('Line');return}
+  if(name==='Pie Chart'||name==='Recommended Charts'){insertChart(name==='Pie Chart'?'Pie':'Column');return}
+  if(name==='PivotTable'){createPivot();return}
   if(name==='AutoSum'){const p=cellToPosition(selected);if(p){let start=p.row-1;while(start>1&&cells[positionToCell(p.col,start-1)]!==undefined&&cells[positionToCell(p.col,start-1)]!=='')start--;const end=p.row-1;const ref=end>=start?positionToCell(p.col,start)+':'+positionToCell(p.col,end):positionToCell(p.col,1)+':'+positionToCell(p.col,1);const value='=SUM('+ref+')';setFormula(value);updateCell(selected,value);notify('SUM formula added')}return}
   if(name==='Insert Rows'||name==='Delete Rows'||name==='Insert Columns'||name==='Delete Columns'){
    const p=cellToPosition(selected);if(!p)return;
@@ -305,6 +330,9 @@ function ExcelEditor({onBack}){
   <div className="ribbonStrip">{ribbonData[active].map(group=><div className="ribbonGroup" key={group.group}><div className="ribbonButtons">{group.items.map(([label,Icon])=><button key={label} className="ribbonAction" onClick={()=>action(label)} title={label}><Icon size={17}/><span>{label}</span></button>)}</div><small>{group.group}</small></div>)}</div>
   {showFormula&&<div className="formulaBar"><span className="cellRef">{selected}</span><span className="fx">fx</span><input value={formula} onChange={e=>{setFormula(e.target.value);updateCell(selected,e.target.value)}} placeholder="Enter value or formula"/></div>}
   <div className="sheetScroll"><table className={showGrid?'sheetGrid':'sheetGrid noGrid'}><thead><tr><th className="corner"></th>{cols.map(c=><th key={c}>{colName(c)}</th>)}</tr></thead><tbody>{rows.map(r=><tr key={r}><th>{r}</th>{cols.map(c=>{const id=colName(c)+r;const style=cellStyles[id]||{};let display=cells[id]===undefined?'':String(calculateCell(id,cells));if(style.numberFormat==='currency'&&display!==''&&Number.isFinite(Number(display)))display='৳ '+Number(display).toFixed(2);if(style.numberFormat==='percent'&&display!==''&&Number.isFinite(Number(display)))display=(Number(display)*100).toFixed(2)+'%';return <td key={id} className={selected===id?'selectedCell':''}><input style={{fontWeight:style.bold?'700':'400',fontStyle:style.italic?'italic':'normal',textDecoration:style.underline?'underline':'none',textAlign:style.textAlign||'left',color:style.color||'inherit',backgroundColor:style.backgroundColor||'transparent'}} aria-label={id} value={editingCell===id?(cells[id]||''):display} onFocus={()=>{selectCell(id);setEditingCell(id)}} onBlur={()=>setEditingCell(null)} onChange={e=>{updateCell(id,e.target.value);if(selected===id)setFormula(e.target.value)}} onDoubleClick={()=>{selectCell(id);setEditingCell(id)}}/></td>})}</tr>)}</tbody></table></div>
+
+  {chart&&<section className="excelDataPanel"><div className="excelPanelHead"><b>{chart.title}</b><button onClick={()=>setChart(null)}>×</button></div><div className="excelChart"><svg viewBox="0 0 340 190" role="img" aria-label={chart.type+' chart'}><line x1="28" y1="155" x2="330" y2="155" stroke="currentColor" opacity=".45"/>{chart.type==='Line'?chart.series.map((series,si)=>{const max=Math.max(1,...series.values.map(Math.abs));const points=series.values.map((v,i)=>(35+i*(285/Math.max(1,series.values.length-1))+','+(150-v/max*115)).join(' ')).join(' ');return <g key={si}><polyline points={points} fill="none" stroke={['#2563eb','#16a34a','#dc7a20'][si%3]} strokeWidth="3"/>{series.values.map((v,i)=><circle key={i} cx={35+i*(285/Math.max(1,series.values.length-1))} cy={150-v/max*115} r="3.5" fill={['#2563eb','#16a34a','#dc7a20'][si%3]}/>)}</g>}):chart.series.flatMap((series,si)=>series.values.map((v,i)=>{const max=Math.max(1,...chart.series.flatMap(x=>x.values).map(Math.abs));const group=285/Math.max(1,chart.labels.length);const width=Math.max(5,Math.min(28,group/(chart.series.length+1)));const height=Math.abs(v)/max*112;return <rect key={si+'-'+i} x={35+i*group+si*width} y={150-height} width={width-3} height={height} rx="2" fill={['#2563eb','#16a34a','#dc7a20'][si%3]}/>;}))}{chart.labels.map((label,i)=><text key={i} x={35+i*(285/Math.max(1,chart.labels.length))} y="174" fontSize="9" fill="currentColor">{String(label).slice(0,8)}</text>)}</svg></div><small>Source: {chart.range}</small></section>}
+  {pivot&&<section className="excelDataPanel"><div className="excelPanelHead"><b>PivotTable Summary</b><button onClick={()=>setPivot(null)}>×</button></div><div className="pivotTable"><table><thead><tr><th>{pivot.category}</th><th>Sum of {pivot.value}</th></tr></thead><tbody>{pivot.rows.map(row=><tr key={row.category}><td>{row.category}</td><td>{row.total.toLocaleString()}</td></tr>)}</tbody><tfoot><tr><th>Grand Total</th><th>{pivot.rows.reduce((sum,row)=>sum+row.total,0).toLocaleString()}</th></tr></tfoot></table></div><small>Source: {pivot.range} • Summary is calculated from current cell values.</small></section>}
   <div className="sheetTabs"><button className="sheetNav" onClick={()=>notify('Previous sheet')}>‹</button><button className="sheetTab activeSheet" onClick={renameSheet} onContextMenu={e=>{e.preventDefault();deleteSheet()}} title="Tap to rename; long/right click to delete">{sheet}</button>{Object.keys({...sheetStore,[sheet]:{cells,cellStyles}}).filter(n=>n!==sheet).map(n=><button key={n} className="sheetTab" onClick={()=>switchSheet(n)}>{n}</button>)}<button className="addSheet" onClick={addSheet}><Plus size={17}/></button><button className="sheetNav" onClick={deleteSheet} title="Delete current sheet"><X size={15}/></button><span className="sheetStatus">Ready</span></div>
   <button className="ribbonMenuButton" onClick={()=>setMenuOpen(v=>!v)} aria-label="Open ribbon menu"><Grid2X2 size={24}/></button>
   {menuOpen&&<><div className="menuScrim" onClick={()=>setMenuOpen(false)}></div><div className="ribbonMenuPanel"><div className="menuPanelTitle">Workbook Menu <button onClick={()=>setMenuOpen(false)}><X size={18}/></button></div>{menus.map(([name,Icon])=><button key={name} className={'menuChoice '+(active===name?'chosen':'')} onClick={()=>{setActive(name);setMenuOpen(false)}}><Icon size={19}/><span>{name}</span>{active===name&&<Check size={16}/>}</button>)}</div></>}
