@@ -64,50 +64,124 @@ function calculateCell(ref,cells,stack=[]){
  const n=numericValue(raw);return n===null?raw:n;
 }
 function calculateFormula(source,cells,stack=[]){
- const getRange=(token)=>{
-  const t=token.trim().replace(/\$/g,'');
-  if(!t.includes(':'))return [calculateCell(t.toUpperCase(),cells,stack)];
-  const parts=t.split(':');if(parts.length!==2)throw Error('Bad range');
-  const a=cellToPosition(parts[0]),b=cellToPosition(parts[1]);if(!a||!b)throw Error('Bad reference');
+ const tokenize=(input)=>{
+  const out=[];let i=0;
+  while(i<input.length){
+   const rest=input.slice(i);
+   if(/^\s+/.test(rest)){i+=rest.match(/^\s+/)[0].length;continue}
+   const m=rest.match(/^(?:"(?:[^"]|"")*"|(?:\$?[A-Z]{1,3}\$?[1-9][0-9]*)|(?:\d+(?:\.\d*)?|\.\d+)|(?:<=|>=|<>|[+\-*/^%&=<>(),:]))/i);
+   if(!m)throw Error('Invalid token');
+   out.push(m[0]);i+=m[0].length;
+  }
+  return out;
+ };
+ const tokens=tokenize(source);let index=0;
+ const peek=()=>tokens[index];
+ const take=()=>tokens[index++];
+ const isCell=t=>typeof t==='string'&&/^\$?[A-Z]{1,3}\$?[1-9][0-9]*$/i.test(t);
+ const cellValue=ref=>{
+  const clean=ref.replace(/\$/g,'').toUpperCase();
+  const value=calculateCell(clean,cells,stack);
+  if(value==='#CYCLE!')throw Error('#CYCLE!');
+  return value;
+ };
+ const rangeValues=(first,last)=>{
+  const a=cellToPosition(first.replace(/\$/g,'')),b=cellToPosition(last.replace(/\$/g,''));
+  if(!a||!b)throw Error('Bad range');
   const values=[];
-  for(let row=Math.min(a.row,b.row);row<=Math.max(a.row,b.row);row++)
-   for(let col=Math.min(a.col,b.col);col<=Math.max(a.col,b.col);col++)
-    values.push(calculateCell(positionToCell(col,row),cells,stack));
+  for(let r=Math.min(a.row,b.row);r<=Math.max(a.row,b.row);r++)
+   for(let c=Math.min(a.col,b.col);c<=Math.max(a.col,b.col);c++)values.push(cellValue(positionToCell(c,r)));
   return values;
  };
- try{
-  const fn=source.trim().match(/^(SUM|AVERAGE|COUNT|MAX|MIN)\s*\((.*)\)$/i);
-  if(fn){
-   const args=fn[2].split(',').flatMap(getRange);
-   const nums=args.map(v=>typeof v==='number'?v:numericValue(v)).filter(v=>v!==null);
-   const name=fn[1].toUpperCase();
-   if(name==='COUNT')return nums.length;
-   if(name==='SUM')return nums.reduce((a,b)=>a+b,0);
-   if(name==='AVERAGE')return nums.length?nums.reduce((a,b)=>a+b,0)/nums.length:0;
-   if(name==='MAX')return nums.length?Math.max(...nums):0;
-   return nums.length?Math.min(...nums):0;
+ const flatten=items=>items.flat(Infinity);
+ const numeric=v=>{if(typeof v==='number')return v;if(v===true)return 1;if(v===false)return 0;return numericValue(v)};
+ const nums=items=>flatten(items).map(numeric).filter(v=>v!==null);
+ const textValue=v=>v===null||v===undefined?'':String(v);
+ const truth=v=>typeof v==='string'?v.length>0&&v.toUpperCase()!=='FALSE':!!v;
+ const parseArgs=()=>{
+  const args=[];
+  if(peek()===')'){take();return args}
+  while(true){args.push(parseCompare());if(peek()===','){take();continue}if(take()!==')')throw Error('Missing )');return args}
+ };
+ const call=(name,args)=>{
+  const flat=flatten(args),n=nums(args),a=args[0],b=args[1];
+  switch(name){
+   case 'SUM':return n.reduce((x,y)=>x+y,0);
+   case 'AVERAGE':case 'AVERAGEA':return n.length?n.reduce((x,y)=>x+y,0)/n.length:0;
+   case 'COUNT':return n.length;
+   case 'COUNTA':return flat.filter(v=>v!==''&&v!==null&&v!==undefined).length;
+   case 'COUNTBLANK':return flat.filter(v=>v===''||v===null||v===undefined).length;
+   case 'MAX':return n.length?Math.max(...n):0;
+   case 'MIN':return n.length?Math.min(...n):0;
+   case 'PRODUCT':return n.reduce((x,y)=>x*y,1);
+   case 'ABS':return Math.abs(Number(a));
+   case 'ROUND':return Number(Number(a).toFixed(Math.max(-10,Math.min(10,Number(b)||0))));
+   case 'ROUNDUP':{const p=Math.pow(10,Number(b)||0);return Math.sign(Number(a))*Math.ceil(Math.abs(Number(a))*p)/p}
+   case 'ROUNDDOWN':{const p=Math.pow(10,Number(b)||0);return Math.sign(Number(a))*Math.floor(Math.abs(Number(a))*p)/p}
+   case 'INT':return Math.floor(Number(a));
+   case 'MOD':return Number(a)%Number(b);
+   case 'POWER':return Math.pow(Number(a),Number(b));
+   case 'SQRT':return Math.sqrt(Number(a));
+   case 'PI':return Math.PI;
+   case 'RAND':return Math.random();
+   case 'IF':return truth(a)?(args[1]??true):(args[2]??false);
+   case 'AND':return flat.every(truth);
+   case 'OR':return flat.some(truth);
+   case 'NOT':return !truth(a);
+   case 'IFERROR':return a;
+   case 'CONCAT':case 'CONCATENATE':return flat.map(textValue).join('');
+   case 'LEFT':return textValue(a).slice(0,Math.max(0,Number(b??1)));
+   case 'RIGHT':return textValue(a).slice(-Math.max(0,Number(b??1)));
+   case 'MID':return textValue(a).slice(Math.max(0,Number(b)-1),Math.max(0,Number(b)-1)+Math.max(0,Number(args[2])));
+   case 'LEN':return textValue(a).length;
+   case 'UPPER':return textValue(a).toUpperCase();
+   case 'LOWER':return textValue(a).toLowerCase();
+   case 'TRIM':return textValue(a).trim().replace(/\s+/g,' ');
+   case 'PROPER':return textValue(a).toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());
+   case 'TODAY':return new Date().toISOString().slice(0,10);
+   case 'NOW':return new Date().toLocaleString();
+   case 'SUMIF':case 'COUNTIF':case 'AVERAGEIF':{
+    const range=flatten([args[0]]),criteria=textValue(args[1]),sumRange=flatten([args[2]??args[0]]);
+    const matches=range.map((v,i)=>({v,i})).filter(({v})=>criteriaMatch(v,criteria));
+    if(name==='COUNTIF')return matches.length;
+    const selected=matches.map(({i})=>numeric(sumRange[i])).filter(v=>v!==null);
+    if(name==='SUMIF')return selected.reduce((x,y)=>x+y,0);
+    return selected.length?selected.reduce((x,y)=>x+y,0)/selected.length:0;
+   }
+   case 'SUMPRODUCT':{
+    const arrays=args.map(x=>flatten([x]).map(v=>numeric(v)??0));const len=Math.min(...arrays.map(x=>x.length));
+    let total=0;for(let i=0;i<len;i++)total+=arrays.reduce((p,arr)=>p*arr[i],1);return total;
+   }
+   case 'COUNTIF':return 0;
+   default:throw Error('Unknown function '+name);
   }
-  const expression=source.trim().replace(/([A-Z]+\$?[1-9][0-9]*)/gi,(ref)=>{
-   const normalized=ref.replace(/\$/g,'').toUpperCase();
-   const v=calculateCell(normalized,cells,stack);
-   const n=typeof v==='number'?v:numericValue(v);
-   if(n===null)throw Error('Non-numeric reference');
-   return String(n);
-  });
-  if(!/^[0-9+\-*/().\s]+$/.test(expression))throw Error('Invalid formula');
-  const tokens=expression.match(/\d+(?:\.\d+)?|[()+\-*/]/g)||[];
-  let i=0;
-  const primary=()=>{
-   const t=tokens[i++];
-   if(t==='('){const v=add();if(tokens[i++]!==')')throw Error('Missing )');return v}
-   if(t==='+')return primary();
-   if(t==='-')return -primary();
-   const n=Number(t);if(!Number.isFinite(n))throw Error('Bad number');return n;
-  };
-  const mul=()=>{let v=primary();while(tokens[i]==='*'||tokens[i]==='/'){const op=tokens[i++],n=primary();v=op==='*'?v*n:v/n}return v};
-  const add=()=>{let v=mul();while(tokens[i]==='+'||tokens[i]==='-'){const op=tokens[i++],n=mul();v=op==='+'?v+n:v-n}return v};
-  const result=add();if(i!==tokens.length||!Number.isFinite(result))throw Error('Invalid result');return result;
- }catch{return '#VALUE!'}
+ };
+ const criteriaMatch=(value,criteria)=>{
+  const s=textValue(criteria),m=s.match(/^(>=|<=|<>|>|<|=)(.*)$/);
+  if(!m)return textValue(value).toLowerCase()===s.toLowerCase();
+  const left=numeric(value),right=numeric(m[2]);
+  const x=left!==null?left:textValue(value),y=right!==null?right:m[2];
+  switch(m[1]){case '>':return x>y;case '<':return x<y;case '>=':return x>=y;case '<=':return x<=y;case '<>':return x!==y;default:return x===y}
+ };
+ const primary=()=>{
+  const t=take();if(t===undefined)throw Error('Missing value');
+  if(t==='('){const v=parseCompare();if(take()!==')')throw Error('Missing )');return v}
+  if(t[0]==='"')return t.slice(1,-1).replace(/""/g,'"');
+  if(/^\d/.test(t)||/^\.\d/.test(t))return Number(t);
+  if(isCell(t)){
+   if(peek()===':'){take();const second=take();if(!isCell(second))throw Error('Bad range');return rangeValues(t,second)}
+   return cellValue(t);
+  }
+  if(/^[A-Z_][A-Z0-9_.]*$/i.test(t)&&peek()==='('){take();return call(t.toUpperCase(),parseArgs())}
+  throw Error('Unexpected value');
+ };
+ const unary=()=>{if(peek()==='+'){take();return +unary()}if(peek()==='-'){take();return -unary()}let v=primary();while(peek()==='%'){take();v=Number(v)/100}return v};
+ const power=()=>{let v=unary();if(peek()==='^'){take();v=Math.pow(Number(v),Number(power()))}return v};
+ const mul=()=>{let v=power();while(peek()==='*'||peek()==='/'){const op=take(),r=power();v=op==='*'?Number(v)*Number(r):Number(v)/Number(r)}return v};
+ const add=()=>{let v=mul();while(peek()==='+'||peek()==='-'){const op=take(),r=mul();v=op==='+'?Number(v)+Number(r):Number(v)-Number(r)}return v};
+ const concat=()=>{let v=add();while(peek()==='&'){take();v=textValue(v)+textValue(add())}return v};
+ const parseCompare=()=>{let v=concat();while(['=','<>','>','<','>=','<='].includes(peek())){const op=take(),r=concat();switch(op){case '=':v=v===r;break;case '<>':v=v!==r;break;case '>':v=v>r;break;case '<':v=v<r;break;case '>=':v=v>=r;break;case '<=':v=v<=r;break}}return v};
+ try{const result=parseCompare();if(index!==tokens.length)throw Error('Unexpected token');if(typeof result==='number'&&!Number.isFinite(result))return '#DIV/0!';return result}catch(error){return error.message==='#CYCLE!'?'#CYCLE!':'#VALUE!'}
 }
 function ExcelEditor({onBack}){
  const [active,setActive]=React.useState('Home');
