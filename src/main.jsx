@@ -1057,9 +1057,34 @@ function ExcelEditor({onBack}){
   </div>}
  </div>
 }
+
+function WordEditor({file,onBack}){
+ const key='smartoffice-word-'+file.id;
+ const [title,setTitle]=React.useState(file.name.replace(/\.(docx?|txt)$/i,''));
+ const [body,setBody]=React.useState(()=>{try{return localStorage.getItem(key)||''}catch{return ''}});
+ const [saved,setSaved]=React.useState(true);
+ React.useEffect(()=>{const t=setTimeout(()=>{try{localStorage.setItem(key,body);localStorage.setItem(key+'-title',title);setSaved(true)}catch{}},400);return()=>clearTimeout(t)},[body,title]);
+ const save=()=>{localStorage.setItem(key,body);localStorage.setItem(key+'-title',title);setSaved(true)};
+ const exportFile=()=>{save();const u=URL.createObjectURL(new Blob([body],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=u;a.download=(title||'Document')+'.txt';a.click();URL.revokeObjectURL(u)};
+ return <div style={{minHeight:'100vh',background:'#eef2f7',color:'#172033'}}><header style={{background:'#fff',padding:12,display:'flex',gap:10,alignItems:'center'}}><button onClick={()=>{save();onBack()}}>‹ Back</button><b style={{flex:1}}>Word Editor</b><button onClick={exportFile}>Export</button><button onClick={save}>Save</button></header><main style={{maxWidth:850,margin:'18px auto',padding:16}}><input value={title} onChange={e=>{setTitle(e.target.value);setSaved(false)}} style={{width:'100%',padding:12,fontSize:20,fontWeight:700,marginBottom:12}}/><textarea value={body} onChange={e=>{setBody(e.target.value);setSaved(false)}} placeholder="এখানে ডকুমেন্ট লিখুন..." style={{boxSizing:'border-box',width:'100%',minHeight:'70vh',padding:28,border:0,background:'#fff',fontSize:16,lineHeight:1.8,resize:'vertical'}}/><small>{saved?'Saved on this device':'Saving…'}</small></main></div>
+}
+function PowerPointEditor({file,onBack}){
+ const key='smartoffice-ppt-'+file.id;
+ const [title,setTitle]=React.useState(file.name.replace(/\.(pptx?)$/i,''));
+ const [slides,setSlides]=React.useState(()=>{try{return JSON.parse(localStorage.getItem(key)||'null')||[{heading:'প্রেজেন্টেশনের শিরোনাম',body:'এখানে বক্তব্য লিখুন'}]}catch{return[{heading:'প্রেজেন্টেশনের শিরোনাম',body:''}]}});
+ const [active,setActive]=React.useState(0);
+ const [saved,setSaved]=React.useState(true);
+ React.useEffect(()=>{const t=setTimeout(()=>{try{localStorage.setItem(key,JSON.stringify(slides));localStorage.setItem(key+'-title',title);setSaved(true)}catch{}},400);return()=>clearTimeout(t)},[slides,title]);
+ const save=()=>{localStorage.setItem(key,JSON.stringify(slides));localStorage.setItem(key+'-title',title);setSaved(true)};
+ const update=(field,value)=>setSlides(old=>old.map((x,i)=>i===active?{...x,[field]:value}:x));
+ const exportFile=()=>{save();const data=slides.map((x,i)=>'SLIDE '+(i+1)+'\n'+x.heading+'\n'+x.body).join('\n\n');const u=URL.createObjectURL(new Blob([data],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=u;a.download=(title||'Presentation')+'.txt';a.click();URL.revokeObjectURL(u)};
+ return <div style={{minHeight:'100vh',background:'#eef2f7',color:'#172033'}}><header style={{background:'#fff',padding:12,display:'flex',gap:10,alignItems:'center'}}><button onClick={()=>{save();onBack()}}>‹ Back</button><b style={{flex:1}}>PowerPoint Editor</b><button onClick={exportFile}>Export</button><button onClick={save}>Save</button></header><main style={{maxWidth:900,margin:'16px auto',padding:16}}><input value={title} onChange={e=>{setTitle(e.target.value);setSaved(false)}} style={{width:'100%',padding:10,fontSize:19,fontWeight:700,marginBottom:12}}/><div style={{display:'flex',gap:8,overflowX:'auto',paddingBottom:12}}>{slides.map((x,i)=><button key={i} onClick={()=>setActive(i)} style={{padding:12,borderRadius:8,border:i===active?'2px solid #d66a28':'1px solid #cbd5e1',background:'#fff'}}>Slide {i+1}</button>)}<button onClick={()=>{setSlides(v=>[...v,{heading:'নতুন স্লাইড',body:''}]);setActive(slides.length);setSaved(false)}}>＋ Add slide</button><button disabled={slides.length<2} onClick={()=>{setSlides(v=>v.filter((_,i)=>i!==active));setActive(Math.max(0,active-1));setSaved(false)}}>Delete slide</button></div><section style={{background:'#fff',aspectRatio:'16/9',maxWidth:760,margin:'12px auto',padding:'7% 8%',boxShadow:'0 3px 16px #0f172a18',display:'flex',flexDirection:'column',justifyContent:'center',gap:18}}><textarea value={slides[active]?.heading||''} onChange={e=>{update('heading',e.target.value);setSaved(false)}} placeholder="Slide title" style={{width:'100%',fontSize:28,fontWeight:700,textAlign:'center',border:0,resize:'none',outline:0}}/><textarea value={slides[active]?.body||''} onChange={e=>{update('body',e.target.value);setSaved(false)}} placeholder="Slide content" style={{width:'100%',minHeight:140,fontSize:19,textAlign:'center',border:0,resize:'vertical',outline:0,lineHeight:1.6}}/></section><small>{saved?'Saved on this device':'Saving…'}</small></main></div>
+}
+
 function App(){
  const [tab,setTab]=React.useState('Home');
  const [excel,setExcel]=React.useState(false);
+ const [officeFile,setOfficeFile]=React.useState(null);
  const [selectedTool,setSelectedTool]=React.useState(null);
  const [recentFiles,setRecentFiles]=React.useState(()=>{try{return JSON.parse(localStorage.getItem('smartoffice-recent-files')||'[]')}catch{return[]}});
  const cards=[{name:'Word',desc:'Create and edit documents',icon:FileText,color:'#2463c7',ext:'docx'},{name:'Excel',desc:'Spreadsheets and calculations',icon:Table2,color:'#16834b',ext:'xlsx'},{name:'PowerPoint',desc:'Presentations and slides',icon:Presentation,color:'#d66a28',ext:'pptx'},{name:'PDF Reader',desc:'View PDF documents',icon:File,color:'#c83b45',ext:'pdf'}];
@@ -1070,8 +1095,11 @@ function App(){
  };
  React.useEffect(()=>{refreshRecent()},[]);
  if(excel)return <ExcelEditor onBack={()=>{setExcel(false);refreshRecent()}}/>;
+ if(officeFile?.type==='Word')return <WordEditor file={officeFile} onBack={()=>{setOfficeFile(null);refreshRecent()}}/>;
+ if(officeFile?.type==='PowerPoint')return <PowerPointEditor file={officeFile} onBack={()=>{setOfficeFile(null);refreshRecent()}}/>;
  const openTool=tool=>{setSelectedTool(tool);refreshRecent()};
- const openRecent=item=>{if(item.type==='Excel'){setExcel(true);setSelectedTool(null)}else{alert(item.type+' ফাইলের তালিকা সংরক্ষিত আছে। এই ফাইল এডিটর মডিউলটি পরবর্তী ধাপে যুক্ত হবে।')}};
+ const openRecent=item=>{setSelectedTool(null);if(item.type==='Excel')setExcel(true);else if(item.type==='Word'||item.type==='PowerPoint')setOfficeFile(item);else alert('PDF Reader পরবর্তী ধাপে যুক্ত হবে।')};
+ const createOfficeFile=type=>{const ext=type==='Word'?'docx':'pptx';const item={id:type+'-'+Date.now(),name:(type==='Word'?'Document':'Presentation')+'-'+new Date().toLocaleDateString('en-CA')+'.'+ext,type,updatedAt:new Date().toISOString()};const list=[item,...recentFiles.filter(x=>x.id!==item.id)];setRecentFiles(list);localStorage.setItem('smartoffice-recent-files',JSON.stringify(list));setSelectedTool(null);setOfficeFile(item)};
  const toolFiles=recentFiles.filter(f=>f.type===selectedTool);
  return <div className="app">
   <header><div className="brand"><div className="brandIcon">S</div><div><b>Smart Office</b><small>Work smarter, anywhere</small></div></div><button className="round" onClick={()=>setSelectedTool(null)}><Settings size={20}/></button></header>
@@ -1080,6 +1108,8 @@ function App(){
    <p style={{color:'#64748b',fontSize:13,margin:'8px 0 18px'}}>আগে খোলা {selectedTool} ফাইলগুলো এখানে দেখাবে। ফাইল নির্বাচন করলে সেটি খুলবে।</p>
    {toolFiles.length? <div style={{display:'grid',gap:10}}>{toolFiles.map(file=><button key={file.id} onClick={()=>openRecent(file)} style={{display:'flex',alignItems:'center',gap:12,textAlign:'left',padding:14,border:'1px solid #e2e8f0',borderRadius:14,background:'#fff',color:'#172033'}}><div className="quickIcon"><FileSpreadsheet size={22}/></div><span style={{flex:1,minWidth:0}}><b style={{display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{file.name}</b><small style={{color:'#64748b'}}>শেষ খোলা: {new Date(file.updatedAt||Date.now()).toLocaleString()}</small></span><span>›</span></button>)}</div>:<div className="quick" style={{marginTop:18}}><div className="quickIcon"><FolderOpen/></div><div><b>কোনো Recent {selectedTool} ফাইল নেই</b><small>নতুন ফাইল তৈরি বা ওপেন করলে এখানে দেখা যাবে।</small></div></div>}
    {selectedTool==='Excel'&&<button className="openBtn" style={{marginTop:18,padding:'12px 18px'}} onClick={()=>{setExcel(true);setSelectedTool(null)}}>＋ নতুন Workbook / Excel খুলুন</button>}
+   {selectedTool==='Word'&&<button className="openBtn" style={{marginTop:18,padding:'12px 18px'}} onClick={()=>createOfficeFile('Word')}>＋ নতুন Word Document তৈরি করুন</button>}
+   {selectedTool==='PowerPoint'&&<button className="openBtn" style={{marginTop:18,padding:'12px 18px'}} onClick={()=>createOfficeFile('PowerPoint')}>＋ নতুন Presentation তৈরি করুন</button>}
    <button className="textBtn" style={{display:'block',marginTop:22}} onClick={()=>setSelectedTool(null)}>Dashboard-এ ফিরে যান</button>
   </main>:<><main><section className="welcome"><div><span className="eyebrow">YOUR PRODUCTIVITY SPACE</span><h1>Everything you need<br/>to get work done.</h1><p>Create, edit and manage your office files in one place.</p></div><div className="welcomeMark">SO</div></section><div className="sectionTitle"><h2>Office tools</h2><span>4 tools</span></div><div className="grid">{cards.map(c=><button className="tool" key={c.name} onClick={()=>openTool(c.name)}><div className="toolIcon" style={{background:c.color}}><c.icon size={25}/></div><b>{c.name}</b><small>{c.desc}</small><span className="arrow">›</span></button>)}</div><div className="sectionTitle recentTitle"><h2>Quick access</h2><button className="textBtn" onClick={()=>{setSelectedTool('Excel');refreshRecent()}}>See all</button></div><div className="quick"><div className="quickIcon"><FolderOpen/></div><div><b>Open a document</b><small>Browse files on your device</small></div><button className="openBtn" onClick={()=>document.getElementById('fileInput').click()}>Open</button><input id="fileInput" type="file" hidden accept=".doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf" onChange={e=>{const f=e.target.files?.[0];if(!f)return;const ext=f.name.split('.').pop().toLowerCase(),type=['xls','xlsx','csv'].includes(ext)?'Excel':['doc','docx'].includes(ext)?'Word':['ppt','pptx'].includes(ext)?'PowerPoint':'PDF Reader';const item={id:type+'-'+f.name+'-'+f.lastModified,name:f.name,type,updatedAt:new Date().toISOString()};const list=[item,...recentFiles.filter(x=>x.id!==item.id)];setRecentFiles(list);localStorage.setItem('smartoffice-recent-files',JSON.stringify(list));setSelectedTool(type);e.target.value=''}}/></div><div className="notice"><ShieldCheck size={18}/><span>Your files stay on your device. Offline-ready design.</span></div></main><nav>{[['Home',FolderOpen],['Recent',Clock3],['Files',FileText]].map(([n,I])=><button className={tab===n?'active':''} onClick={()=>{setTab(n);if(n!=='Home')setSelectedTool(n==='Recent'?'Excel':'Excel')}}><I size={20}/><span>{n}</span></button>)}</nav>{tab!=='Home'&&<div className="toast" onClick={()=>{setTab('Home');setSelectedTool(null)}}>{tab} — tap to return Home.</div>}</>}
  </div>
