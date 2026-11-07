@@ -901,6 +901,43 @@ function ExcelEditor({onBack}){
     updateCell(inputCell,x1);notify('Goal Seek সফল: '+inputCell+' = '+Number(x1.toFixed(8)));return;
    }catch(error){notify('Goal Seek ব্যর্থ: '+error.message);return}
   }
+  if(name==='Remove Duplicates'){
+   const b=getSelectionBounds();
+   if(b.maxRow<=b.minRow){notify('Duplicate খুঁজতে একাধিক Row নির্বাচন করুন');return}
+   const headers=Array.from({length:b.maxCol-b.minCol+1},(_,i)=>positionToCell(b.minCol+i,b.minRow));
+   const headerChoice=window.confirm('প্রথম Row কি Header? OK = Header, Cancel = সব Row-কে Data ধরুন');
+   const start=headerChoice?b.minRow+1:b.minRow;
+   if(start>b.maxRow){notify('Data Row পাওয়া যায়নি');return}
+   const seen=new Set(),keep=[];
+   for(let r=start;r<=b.maxRow;r++){
+    const values=headers.map((_,i)=>cells[positionToCell(b.minCol+i,r)]??'');
+    if(values.every(v=>String(v).trim()==='')){keep.push(r);continue}
+    const key=JSON.stringify(values.map(v=>String(v).trim().toLowerCase()));
+    if(!seen.has(key)){seen.add(key);keep.push(r)}
+   }
+   const removed=(b.maxRow-start+1)-(keep.length-(headerChoice?0:0));
+   if(removed<=0){notify('কোনো Duplicate Row পাওয়া যায়নি');return}
+   const next={...cells},nextStyles={...cellStyles};
+   const allRows=new Map();
+   for(let r=b.minRow;r<=b.maxRow;r++){
+    const rowCells={},rowStyles={};
+    Object.keys(cells).forEach(id=>{const p=cellToPosition(id);if(p?.row===r)rowCells[p.col]=cells[id]});
+    Object.keys(cellStyles).forEach(id=>{const p=cellToPosition(id);if(p?.row===r)rowStyles[p.col]=cellStyles[id]});
+    allRows.set(r,{rowCells,rowStyles});
+   }
+   for(let r=b.minRow;r<=b.maxRow;r++){
+    Object.keys(next).forEach(id=>{if(cellToPosition(id)?.row===r)delete next[id]});
+    Object.keys(nextStyles).forEach(id=>{if(cellToPosition(id)?.row===r)delete nextStyles[id]});
+   }
+   const outputRows=headerChoice?[b.minRow,...keep]:keep;
+   outputRows.forEach((source,index)=>{
+    const target=b.minRow+index,record=allRows.get(source);
+    Object.entries(record?.rowCells||{}).forEach(([col,value])=>next[positionToCell(Number(col),target)]=value);
+    Object.entries(record?.rowStyles||{}).forEach(([col,value])=>nextStyles[positionToCell(Number(col),target)]=value);
+   });
+   setCells(next);setCellStyles(nextStyles);recordHistory(next,nextStyles);
+   notify(removed+'টি Duplicate Row সরানো হয়েছে');return;
+  }
   if(name==='Data Validation'){
    const mode=window.prompt('Validation type লিখুন: list / whole / decimal / clear','list');if(mode===null)return;
    const b=getSelectionBounds(),next={...dataValidations};
