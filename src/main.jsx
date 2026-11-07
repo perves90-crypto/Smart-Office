@@ -237,38 +237,58 @@ function ExcelEditor({onBack}){
  const getSelectionBounds=()=>{
   const p=cellToPosition(selected)||{row:1,col:1};
   let minRow=p.row,maxRow=p.row,minCol=p.col,maxCol=p.col;
+  const populated=Object.keys(cells).map(k=>cellToPosition(k)).filter(Boolean);
   if(selectionBand?.axis==='all'){
    minRow=1;minCol=1;
-   for(const key of Object.keys(cells)){const q=cellToPosition(key);if(q){maxRow=Math.max(maxRow,q.row);maxCol=Math.max(maxCol,q.col)}}
+   maxRow=Math.max(visibleRows,...populated.map(q=>q.row),1);
+   maxCol=Math.max(visibleCols,...populated.map(q=>q.col),1);
   }else if(selectionBand?.axis==='col'){
-   minRow=1;maxRow=Math.max(visibleRows,...Object.keys(cells).map(k=>cellToPosition(k)?.row||1));minCol=maxCol=selectionBand.index;
+   minRow=1;maxRow=Math.max(visibleRows,...populated.map(q=>q.row),1);
+   minCol=maxCol=Number(selectionBand.index)||p.col;
   }else if(selectionBand?.axis==='row'){
-   minCol=1;maxCol=Math.max(visibleCols,...Object.keys(cells).map(k=>cellToPosition(k)?.col||1));minRow=maxRow=selectionBand.index;
+   minCol=1;maxCol=Math.max(visibleCols,...populated.map(q=>q.col),1);
+   minRow=maxRow=Number(selectionBand.index)||p.row;
+  }else if(selectionBand?.axis==='range'){
+   const a=cellToPosition(selectionBand.start),b=cellToPosition(selectionBand.end);
+   if(a&&b){minRow=Math.min(a.row,b.row);maxRow=Math.max(a.row,b.row);minCol=Math.min(a.col,b.col);maxCol=Math.max(a.col,b.col)}
   }
   return {minRow,maxRow,minCol,maxCol};
  };
  const copyCell=async(cut=false)=>{
-  const b=getSelectionBounds(),matrix=[];
-  for(let r=b.minRow;r<=b.maxRow;r++){const line=[];for(let c=b.minCol;c<=b.maxCol;c++)line.push(cells[positionToCell(c,r)]??'');matrix.push(line)}
-  const item={kind:'range',matrix,styles:cellStyles,bounds:b};
-  setClipboard(item);
+  const b=getSelectionBounds(),matrix=[],stylesMatrix=[];
+  for(let r=b.minRow;r<=b.maxRow;r++){
+   const line=[],styleLine=[];
+   for(let c=b.minCol;c<=b.maxCol;c++){const id=positionToCell(c,r);line.push(cells[id]??'');styleLine.push(cellStyles[id]||null)}
+   matrix.push(line);stylesMatrix.push(styleLine);
+  }
+  setClipboard({kind:'range',matrix,stylesMatrix,bounds:b});
   const tsv=matrix.map(row=>row.map(v=>String(v).replace(/\t/g,' ')).join('\t')).join('\n');
   try{await navigator.clipboard?.writeText(tsv)}catch{}
-  if(cut){const next={...cells};for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++)delete next[positionToCell(c,r)];setCells(next);setCellHistory(h=>[...h.slice(0,historyIndex+1),next].slice(-101));setHistoryIndex(i=>Math.min(i+1,100))}
+  if(cut){
+   const next={...cells},nextStyles={...cellStyles};
+   for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++){const id=positionToCell(c,r);delete next[id];delete nextStyles[id]}
+   setCells(next);setCellStyles(nextStyles);
+   setCellHistory(h=>[...h.slice(0,historyIndex+1),next].slice(-101));setHistoryIndex(i=>Math.min(i+1,100));
+  }
   notify(cut?'নির্বাচিত অংশ Cut হয়েছে':'নির্বাচিত অংশ Copy হয়েছে');
  };
- const pasteMatrix=(matrix)=>{
+ const pasteMatrix=(matrix,stylesMatrix=null)=>{
   if(!matrix?.length)return;
-  const start=cellToPosition(selected)||{row:1,col:1},next={...cells};
-  matrix.forEach((line,ri)=>line.forEach((value,ci)=>{next[positionToCell(start.col+ci,start.row+ri)]=value}));
-  setCells(next);setCellHistory(h=>[...h.slice(0,historyIndex+1),next].slice(-101));setHistoryIndex(i=>Math.min(i+1,100));
+  const start=cellToPosition(selected)||{row:1,col:1},next={...cells},nextStyles={...cellStyles};
+  matrix.forEach((line,ri)=>line.forEach((value,ci)=>{
+   const id=positionToCell(start.col+ci,start.row+ri);next[id]=value;
+   const copiedStyle=stylesMatrix?.[ri]?.[ci];
+   if(copiedStyle)nextStyles[id]={...copiedStyle};else if(stylesMatrix)delete nextStyles[id];
+  }));
+  setCells(next);if(stylesMatrix)setCellStyles(nextStyles);
+  setCellHistory(h=>[...h.slice(0,historyIndex+1),next].slice(-101));setHistoryIndex(i=>Math.min(i+1,100));
   const last=positionToCell(start.col+(matrix[0]?.length||1)-1,start.row+matrix.length-1);
   setSelectionBand({axis:'range',start:selected,end:last});setFormula(next[selected]??'');notify('Paste সম্পন্ন হয়েছে');
  };
  const pasteCell=()=>{
   if(!clipboard){notify('আগে Copy করুন অথবা বাইরের লেখা Paste করুন');return}
   if(clipboard.kind==='style'){setCellStyles(p=>({...p,[selected]:{...clipboard.style}}));notify('Format applied');return}
-  if(clipboard.kind==='range'){pasteMatrix(clipboard.matrix);return}
+  if(clipboard.kind==='range'){pasteMatrix(clipboard.matrix,clipboard.stylesMatrix||null);return}
   pasteMatrix([[clipboard.value]]);
  };
  const shiftCells=(axis,at,remove=false)=>{
