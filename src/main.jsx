@@ -230,25 +230,22 @@ function ExcelEditor({onBack}){
  const notify=t=>{setNotice(t);setTimeout(()=>setNotice(''),1800)};
  const [confirmExit,setConfirmExit]=React.useState(false);
  const exitHandler=React.useRef(null);
- exitHandler.current=()=>{
-  if(menuOpen){setMenuOpen(false);return}
-  if(pivotWizard){setPivotWizard(null);return}
-  if(editingCell){setEditingCell(null);return}
-  if(chart){setChart(null);return}
-  if(pivot){setPivot(null);return}
-  setConfirmExit(true);
- };
+ exitHandler.current=()=>{setConfirmExit(true)};
  const requestExit=()=>exitHandler.current?.();
  React.useEffect(()=>{
-  window.history.pushState({smartExcelBack:true},'');
-  const onPopState=()=>{exitHandler.current?.();window.history.pushState({smartExcelBack:true},'')};
-  const onKeyDown=e=>{if(e.key==='Escape'||e.key==='BrowserBack'){e.preventDefault();exitHandler.current?.()}};
+  let active=true;
+  const pushBackState=()=>{try{window.history.pushState({smartExcelBack:true},'')}catch{}};
+  pushBackState();
+  const onPopState=()=>{if(!active)return;setConfirmExit(true);pushBackState()};
+  const onKeyDown=e=>{if(e.key==='Escape'||e.key==='BrowserBack'||e.key==='Backspace'&& !['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)){e.preventDefault();setConfirmExit(true)}};
   window.addEventListener('popstate',onPopState);
   window.addEventListener('keydown',onKeyDown);
-  return()=>{window.removeEventListener('popstate',onPopState);window.removeEventListener('keydown',onKeyDown)};
+  let nativeBackListener=null;
+  import('@capacitor/app').then(({App})=>App.addListener('backButton',()=>{if(active)setConfirmExit(true)})).then(listener=>{nativeBackListener=listener}).catch(()=>{});
+  return()=>{active=false;window.removeEventListener('popstate',onPopState);window.removeEventListener('keydown',onKeyDown);nativeBackListener?.remove?.()};
  },[]);
 
- React.useEffect(()=>{if(isRestoring)return;const timer=setTimeout(()=>{const all={...sheetStore,[sheet]:{cells,cellStyles}};setSheetStore(all);const data={sheets:all,cells,cellStyles,sheet,workbookName,chart,pivot,savedAt:new Date().toISOString()};try{const request=indexedDB.open('SmartOfficeWorkbookDB',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('workbooks'))request.result.createObjectStore('workbooks')};request.onsuccess=()=>{const db=request.result,tx=db.transaction('workbooks','readwrite');tx.objectStore('workbooks').put(data,'current');tx.oncomplete=()=>db.close();tx.onerror=()=>{db.close();notify('Workbook auto-save failed. Please export a backup')}};request.onerror=()=>notify('Device storage unavailable. Please export a backup')}catch{notify('Device storage unavailable. Please export a backup')}},500);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName,chart,pivot,isRestoring]);
+ React.useEffect(()=>{if(isRestoring)return;const timer=setTimeout(()=>{const all={...sheetStore,[sheet]:{cells,cellStyles}};setSheetStore(all);const data={sheets:all,cells,cellStyles,sheet,workbookName,chart,pivot,savedAt:new Date().toISOString()};try{localStorage.setItem('smartoffice-workbook',JSON.stringify(data))}catch{};try{const request=indexedDB.open('SmartOfficeWorkbookDB',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('workbooks'))request.result.createObjectStore('workbooks')};request.onsuccess=()=>{const db=request.result,tx=db.transaction('workbooks','readwrite');tx.objectStore('workbooks').put(data,'current');tx.oncomplete=()=>db.close();tx.onerror=()=>{db.close();notify('Workbook auto-save failed. Please export a backup')}};request.onerror=()=>notify('Device storage unavailable. Please export a backup')}catch{notify('Device storage unavailable. Please export a backup')}},500);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName,chart,pivot,isRestoring]);
  const selectCell=(id)=>{setSelected(id);setFormula(cells[id]||'');setSelectionBand(null)};
  const selectWholeColumn=(col)=>{const id=positionToCell(col,1);setSelected(id);setFormula(cells[id]||'');setSelectionBand({axis:'col',index:col});notify(colName(col)+' কলাম সম্পূর্ণ সিলেক্ট হয়েছে');};
  const selectWholeRow=(row)=>{const id=positionToCell(1,row);setSelected(id);setFormula(cells[id]||'');setSelectionBand({axis:'row',index:row});notify(row+' নম্বর Row সম্পূর্ণ সিলেক্ট হয়েছে');};
@@ -588,8 +585,7 @@ function ExcelEditor({onBack}){
   if(['General','Number','Currency','Accounting','Percentage','Date','Time','Fraction','Scientific','Text'].includes(name)){setFormat(name);return}
   if(name==='Increase Decimal'||name==='Decrease Decimal'){const old=Number(cellStyles[selected]?.decimalPlaces??2),decimalPlaces=Math.max(0,Math.min(10,old+(name==='Increase Decimal'?1:-1)));applyStyleToSelection({decimalPlaces});return}
   if(name==='Insert Rows'||name==='Delete Rows'||name==='Insert Columns'||name==='Delete Columns'){
-   const p=cellToPosition(selected);if(!p)return;const axis=name.includes('Rows')?'row':'col',remove=name.startsWith('Delete'),at=axis==='row'?p.row:p.col;
-   if(remove&&at===1){notify('The first row/column cannot be deleted');return;}shiftCells(axis,at,remove);return;
+   const p=cellToPosition(selected);if(!p)return;const axis=name.includes('Rows')?'row':'col',remove=name.startsWith('Delete'),bounds=getSelectionBounds();const at=axis==='row'?(selectionBand?.axis==='row'?Number(selectionBand.index):bounds.minRow):(selectionBand?.axis==='col'?Number(selectionBand.index):bounds.minCol);shiftCells(axis,at,remove);if(remove){setSelected(axis==='row'?positionToCell(p.col,Math.max(1,at)):positionToCell(Math.max(1,at),p.row));setSelectionBand(null)}return;
   }
   if(name==='Row Height'||name==='Column Width'){const p=cellToPosition(selected);if(!p)return;const value=Number(window.prompt(name==='Row Height'?'Row height (px):':'Column width (px):',name==='Row Height'?(rowHeights[p.row]||32):(columnWidths[p.col]||110)));if(!Number.isFinite(value)||value<10||value>500){notify('মান ১০ থেকে ৫০০-এর মধ্যে দিন');return}if(name==='Row Height')setRowHeights(v=>({...v,[p.row]:value}));else setColumnWidths(v=>({...v,[p.col]:value}));return}
   if(name==='AutoFit Row Height'){setRowHeights(v=>({...v,[cellToPosition(selected)?.row||1]:44}));notify('Row height AutoFit করা হয়েছে');return}
