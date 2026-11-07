@@ -965,6 +965,38 @@ function ExcelEditor({onBack}){
    setCells(next);setCellStyles(nextStyles);recordHistory(next,nextStyles);
    notify(removed+'টি Duplicate Row সরানো হয়েছে');return;
   }
+  if(name==='Goal Seek'){
+   const targetRef=String(selected||'').toUpperCase(),formula=cells[targetRef];
+   if(typeof formula!=='string'||!formula.trim().startsWith('=')){notify('প্রথমে একটি Formula Cell নির্বাচন করুন');return}
+   const targetInput=window.prompt('Formula cell '+targetRef+'-এর কাঙ্ক্ষিত ফলাফল লিখুন','100');if(targetInput===null)return;
+   const target=Number(targetInput);if(!Number.isFinite(target)){notify('সঠিক Target Number দিন');return}
+   const variableInput=window.prompt('যে Input Cell পরিবর্তন করে ফলাফল মিলাবেন তার ঠিকানা লিখুন','A1');if(variableInput===null)return;
+   const variableRef=variableInput.trim().toUpperCase().replace(/\$/g,'');
+   if(!/^[A-Z]{1,3}[1-9][0-9]*$/.test(variableRef)||variableRef===targetRef){notify('সঠিক আলাদা Input Cell দিন');return}
+   const original=cells[variableRef]??0,initial=Number(original);
+   if(!Number.isFinite(initial)){notify('Input Cell-এ Numeric Value থাকতে হবে');return}
+   const evaluate=x=>{const draft={...cells,[variableRef]:x};const value=calculateCell(targetRef,draft);const n=Number(value);if(!Number.isFinite(n))throw Error('Formula result numeric নয়');return n};
+   let x=initial,fx;
+   try{fx=evaluate(x)-target}catch(error){notify('Formula হিসাব করা যায়নি: '+error.message);return}
+   if(Math.abs(fx)<1e-8){notify('বর্তমান Input-এই Target মিলে গেছে');return}
+   let x2=x+(Math.abs(x)*0.01||0.01),f2;
+   try{f2=evaluate(x2)-target}catch(error){notify('Formula হিসাব করা যায়নি: '+error.message);return}
+   let solved=false;
+   for(let i=0;i<100;i++){
+    if(Math.abs(f2)<1e-7){solved=true;break}
+    const denominator=f2-fx;
+    if(Math.abs(denominator)<1e-14)break;
+    const nextX=x2-f2*(x2-x)/denominator;
+    if(!Number.isFinite(nextX)||Math.abs(nextX)>1e12)break;
+    x=x2;fx=f2;x2=nextX;
+    try{f2=evaluate(x2)-target}catch(error){break}
+   }
+   if(!solved&&Math.abs(f2)<1e-5)solved=true;
+   if(!solved){notify('Goal Seek সমাধান পায়নি। অন্য Initial Value দিয়ে চেষ্টা করুন।');return}
+   const next={...cells,[variableRef]:Number(x2.toPrecision(12))};
+   setCells(next);recordHistory(next,cellStyles);setSelected(variableRef);
+   notify('Goal Seek সফল: '+variableRef+' = '+next[variableRef]+'; '+targetRef+' ≈ '+target);return;
+  }
   if(name==='Data Validation'){
    const mode=window.prompt('Validation type লিখুন: list / whole / decimal / clear','list');if(mode===null)return;
    const b=getSelectionBounds(),next={...dataValidations};
