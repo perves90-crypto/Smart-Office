@@ -233,6 +233,7 @@ function ExcelEditor({onBack}){
  const [cellStyles,setCellStyles]=React.useState(()=>initialWorkbook?.cellStyles||{});
  const [sheetStore,setSheetStore]=React.useState(()=>initialWorkbook?.sheets||{[initialWorkbook?.sheet||'Sheet1']:{cells:initialWorkbook?.cells||{},cellStyles:initialWorkbook?.cellStyles||{}}});
  const [cellHistory,setCellHistory]=React.useState(()=>[initialWorkbook?.cells||{}]);
+ const [styleHistory,setStyleHistory]=React.useState(()=>[initialWorkbook?.cellStyles||{}]);
  const [historyIndex,setHistoryIndex]=React.useState(0);
  const [clipboard,setClipboard]=React.useState(null);
  const [sheet,setSheet]=React.useState(()=>initialWorkbook?.sheet||'Sheet1');
@@ -282,14 +283,17 @@ function ExcelEditor({onBack}){
  const selectCell=(id)=>{setSelected(id);setFormula(cells[id]??'');setSelectionBand(null)};
  const selectWholeColumn=(col)=>{const id=positionToCell(col,1);setSelected(id);setFormula(cells[id]??'');setSelectionBand({axis:'col',index:col});notify(colName(col)+' কলাম সম্পূর্ণ সিলেক্ট হয়েছে');};
  const selectWholeRow=(row)=>{const id=positionToCell(1,row);setSelected(id);setFormula(cells[id]??'');setSelectionBand({axis:'row',index:row});notify(row+' নম্বর Row সম্পূর্ণ সিলেক্ট হয়েছে');};
- const updateCell=(id,value)=>{
-  const next={...cells,[id]:value};
-  setCells(next);
-  setCellHistory(h=>[...h.slice(0,historyIndex+1),next].slice(-101));
+ const recordHistory=(nextCells,nextStyles=cellStyles)=>{
+  setCellHistory(h=>[...h.slice(0,historyIndex+1),nextCells].slice(-101));
+  setStyleHistory(h=>[...h.slice(0,historyIndex+1),nextStyles].slice(-101));
   setHistoryIndex(i=>Math.min(i+1,100));
  };
- const undo=()=>{if(historyIndex<=0){notify('Nothing to undo');return}const i=historyIndex-1;setHistoryIndex(i);setCells(cellHistory[i]||{});setFormula((cellHistory[i]||{})[selected]??'');notify('Undo complete')};
- const redo=()=>{if(historyIndex>=cellHistory.length-1){notify('Nothing to redo');return}const i=historyIndex+1;setHistoryIndex(i);setCells(cellHistory[i]||{});setFormula((cellHistory[i]||{})[selected]||'');notify('Redo complete')};
+ const updateCell=(id,value)=>{
+  const next={...cells,[id]:value};
+  setCells(next);recordHistory(next);
+ };
+ const undo=()=>{if(historyIndex<=0){notify('Nothing to undo');return}const i=historyIndex-1;setHistoryIndex(i);setCells(cellHistory[i]||{});setCellStyles(styleHistory[i]||{});setFormula((cellHistory[i]||{})[selected]??'');notify('Undo complete')};
+ const redo=()=>{if(historyIndex>=cellHistory.length-1){notify('Nothing to redo');return}const i=historyIndex+1;setHistoryIndex(i);setCells(cellHistory[i]||{});setCellStyles(styleHistory[i]||{});setFormula((cellHistory[i]||{})[selected]??'');notify('Redo complete')};
  const getSelectionBounds=()=>{
   const p=cellToPosition(selected)||{row:1,col:1};
   let minRow=p.row,maxRow=p.row,minCol=p.col,maxCol=p.col;
@@ -324,7 +328,7 @@ function ExcelEditor({onBack}){
    const next={...cells},nextStyles={...cellStyles};
    for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++){const id=positionToCell(c,r);delete next[id];delete nextStyles[id]}
    setCells(next);setCellStyles(nextStyles);
-   setCellHistory(h=>[...h.slice(0,historyIndex+1),next].slice(-101));setHistoryIndex(i=>Math.min(i+1,100));
+   recordHistory(next,nextStyles);
   }
   notify(cut?'নির্বাচিত অংশ Cut হয়েছে':'নির্বাচিত অংশ Copy হয়েছে');
  };
@@ -337,7 +341,7 @@ function ExcelEditor({onBack}){
    if(copiedStyle)nextStyles[id]={...copiedStyle};else if(stylesMatrix)delete nextStyles[id];
   }));
   setCells(next);if(stylesMatrix)setCellStyles(nextStyles);
-  setCellHistory(h=>[...h.slice(0,historyIndex+1),next].slice(-101));setHistoryIndex(i=>Math.min(i+1,100));
+  recordHistory(next,nextStyles);
   const last=positionToCell(start.col+(matrix[0]?.length||1)-1,start.row+matrix.length-1);
   setSelectionBand({axis:'range',start:selected,end:last});setFormula(next[selected]??'');notify('Paste সম্পন্ন হয়েছে');
  };
@@ -350,7 +354,7 @@ function ExcelEditor({onBack}){
  const shiftCells=(axis,at,remove=false,count=1)=>{
   const amount=Math.max(1,Math.floor(Number(count)||1));
   const remap=(source)=>{const out={};for(const [key,value] of Object.entries(source)){const p=cellToPosition(key);if(!p)continue;const n=axis==='row'?p.row:p.col;if(remove&&n>=at&&n<at+amount)continue;const moved=remove?(n>=at+amount?n-amount:n):(n>=at?n+amount:n);const dest=axis==='row'?positionToCell(p.col,moved):positionToCell(moved,p.row);out[dest]=value;}return out;};
-  const next=remap(cells),styles=remap(cellStyles);setCells(next);setCellStyles(styles);setCellHistory(h=>[...h.slice(0,historyIndex+1),next].slice(-101));setHistoryIndex(i=>Math.min(i+1,100));setFormula(next[selected]??'');notify((remove?'Deleted ':'Inserted ')+(axis==='row'?'row':'column'));
+  const next=remap(cells),styles=remap(cellStyles);setCells(next);setCellStyles(styles);recordHistory(next,styles);setFormula(next[selected]??'');notify((remove?'Deleted ':'Inserted ')+(axis==='row'?'row':'column'));
  };
  const updateStyle=(patch)=>setCellStyles(p=>({...p,[selected]:{...(p[selected]||{}),...patch}}));
  const applyStyleToSelection=(patch)=>{
@@ -371,7 +375,7 @@ function ExcelEditor({onBack}){
   const b=getSelectionBounds(),origin=cellToPosition(selected)||{row:b.minRow,col:b.minCol},source=cells[selected]??'',next={...cells};
   if(axis==='down'){for(let r=origin.row+1;r<=b.maxRow;r++)next[positionToCell(origin.col,r)]=source;}
   else {for(let c=origin.col+1;c<=b.maxCol;c++)next[positionToCell(c,origin.row)]=source;}
-  setCells(next);setCellHistory(h=>[...h.slice(0,historyIndex+1),next].slice(-101));setHistoryIndex(i=>Math.min(i+1,100));
+  setCells(next);recordHistory(next);
   notify(axis==='down'?'Fill Down সম্পন্ন':'Fill Right সম্পন্ন');
  };
  const sortSelection=(direction)=>{
