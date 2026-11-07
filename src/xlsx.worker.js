@@ -17,7 +17,12 @@ self.onmessage = (event) => {
     });
     const names = workbook.SheetNames || [];
     const activeIndex = workbook.Workbook?.Views?.[0]?.activeTab;
-    const activeSheet = Number.isInteger(activeIndex) ? names[activeIndex] : names[0];
+    const sheetMeta = workbook.Workbook?.Sheets || [];
+    const firstVisible = names.findIndex((_, index) => !sheetMeta[index]?.Hidden);
+    const chosenIndex = Number.isInteger(activeIndex) && names[activeIndex] && !sheetMeta[activeIndex]?.Hidden
+      ? activeIndex
+      : (firstVisible >= 0 ? firstVisible : 0);
+    const activeSheet = names[chosenIndex];
     if (!names.length) throw new Error('কোনো Worksheet পাওয়া যায়নি');
     const sheets = {};
     names.forEach((name,index) => {
