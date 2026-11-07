@@ -129,7 +129,7 @@ function calculateFormula(source,cells,stack=[]){
    case 'AND':return flat.every(truth);
    case 'OR':return flat.some(truth);
    case 'NOT':return !truth(a);
-   case 'IFERROR':return a;
+   case 'IFERROR':return ['#VALUE!','#DIV/0!','#REF!','#NAME?','#N/A'].includes(a)?(args[1]??''):a;
    case 'CONCAT':case 'CONCATENATE':return flat.map(textValue).join('');
    case 'LEFT':return textValue(a).slice(0,Math.max(0,Number(b??1)));
    case 'RIGHT':return textValue(a).slice(-Math.max(0,Number(b??1)));
@@ -152,9 +152,7 @@ function calculateFormula(source,cells,stack=[]){
    case 'SUMPRODUCT':{
     const arrays=args.map(x=>flatten([x]).map(v=>numeric(v)??0));const len=Math.min(...arrays.map(x=>x.length));
     let total=0;for(let i=0;i<len;i++)total+=arrays.reduce((p,arr)=>p*arr[i],1);return total;
-   }
-   case 'COUNTIF':return 0;
-   default:throw Error('Unknown function '+name);
+   }default:throw Error('Unknown function '+name);
   }
  };
  const criteriaMatch=(value,criteria)=>{
@@ -189,7 +187,7 @@ function ExcelEditor({onBack}){
  const [initialWorkbook]=React.useState(loadSavedWorkbook);
  const [isRestoring,setIsRestoring]=React.useState(true);
  const [isImporting,setIsImporting]=React.useState(false);
- React.useEffect(()=>{let live=true;try{const req=indexedDB.open('SmartOfficeWorkbookDB',1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('workbooks'))req.result.createObjectStore('workbooks')};req.onsuccess=()=>{const db=req.result,tx=db.transaction('workbooks','readonly'),get=tx.objectStore('workbooks').get('current');get.onsuccess=()=>{if(live&&get.result){const d=get.result;setSheetStore(d.sheets||{});setCells(d.cells||{});setCellStyles(d.cellStyles||{});setSheet(d.sheet||'Sheet1');setWorkbookName(d.workbookName||'Book1');setChart(d.chart||null);setPivot(d.pivot||null)}if(live)setIsRestoring(false);db.close()};get.onerror=()=>{if(live)setIsRestoring(false);db.close()}};req.onerror=()=>{if(live)setIsRestoring(false)}}catch{setIsRestoring(false)}return()=>{live=false}},[]);
+ React.useEffect(()=>{let live=true;try{const req=indexedDB.open('SmartOfficeWorkbookDB',1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('workbooks'))req.result.createObjectStore('workbooks')};req.onsuccess=()=>{const db=req.result,tx=db.transaction('workbooks','readonly'),get=tx.objectStore('workbooks').get('current');get.onsuccess=()=>{if(live){const disk=get.result;const local=initialWorkbook;const diskTime=Date.parse(disk?.savedAt||'')||0;const localTime=Date.parse(local?.savedAt||'')||0;const d=(local&&localTime>diskTime)?local:(disk||local);if(d){setSheetStore(d.sheets||{[d.sheet||'Sheet1']:{cells:d.cells||{},cellStyles:d.cellStyles||{}}});setCells(d.cells||{});setCellStyles(d.cellStyles||{});setSheet(d.sheet||'Sheet1');setWorkbookName(d.workbookName||'Book1');setChart(d.chart||null);setPivot(d.pivot||null);setRowHeights(d.rowHeights||{});setColumnWidths(d.columnWidths||{});setHiddenRows(d.hiddenRows||[]);setHiddenCols(d.hiddenCols||[]);setMergedRanges(d.mergedRanges||[]);setFilterConfig(d.filterConfig||null);setFilter(!!d.filterConfig)}}if(live)setIsRestoring(false);db.close()};get.onerror=()=>{if(live)setIsRestoring(false);db.close()}};req.onerror=()=>{if(live)setIsRestoring(false)}}catch{setIsRestoring(false)}return()=>{live=false}},[]);
  const [active,setActive]=React.useState('Home');
  const [menuOpen,setMenuOpen]=React.useState(false);
  const [selected,setSelected]=React.useState('A1');
@@ -245,7 +243,7 @@ function ExcelEditor({onBack}){
   return()=>{active=false;window.removeEventListener('popstate',onPopState);window.removeEventListener('keydown',onKeyDown);nativeBackListener?.remove?.()};
  },[]);
 
- React.useEffect(()=>{if(isRestoring)return;const timer=setTimeout(()=>{const all={...sheetStore,[sheet]:{cells,cellStyles}};setSheetStore(all);const data={sheets:all,cells,cellStyles,sheet,workbookName,chart,pivot,savedAt:new Date().toISOString()};try{localStorage.setItem('smartoffice-workbook',JSON.stringify(data))}catch{};try{const request=indexedDB.open('SmartOfficeWorkbookDB',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('workbooks'))request.result.createObjectStore('workbooks')};request.onsuccess=()=>{const db=request.result,tx=db.transaction('workbooks','readwrite');tx.objectStore('workbooks').put(data,'current');tx.oncomplete=()=>db.close();tx.onerror=()=>{db.close();notify('Workbook auto-save failed. Please export a backup')}};request.onerror=()=>notify('Device storage unavailable. Please export a backup')}catch{notify('Device storage unavailable. Please export a backup')}},500);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName,chart,pivot,isRestoring]);
+ React.useEffect(()=>{if(isRestoring)return;const timer=setTimeout(()=>{const all={...sheetStore,[sheet]:{cells,cellStyles}};setSheetStore(all);const data={sheets:all,cells,cellStyles,sheet,workbookName,chart,pivot,rowHeights,columnWidths,hiddenRows,hiddenCols,mergedRanges,filterConfig,savedAt:new Date().toISOString()};try{localStorage.setItem('smartoffice-workbook',JSON.stringify(data))}catch{};try{const request=indexedDB.open('SmartOfficeWorkbookDB',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('workbooks'))request.result.createObjectStore('workbooks')};request.onsuccess=()=>{const db=request.result,tx=db.transaction('workbooks','readwrite');tx.objectStore('workbooks').put(data,'current');tx.oncomplete=()=>db.close();tx.onerror=()=>{db.close();notify('Workbook auto-save failed. Please export a backup')}};request.onerror=()=>notify('Device storage unavailable. Please export a backup')}catch{notify('Device storage unavailable. Please export a backup')}},500);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName,chart,pivot,isRestoring]);
  const selectCell=(id)=>{setSelected(id);setFormula(cells[id]||'');setSelectionBand(null)};
  const selectWholeColumn=(col)=>{const id=positionToCell(col,1);setSelected(id);setFormula(cells[id]||'');setSelectionBand({axis:'col',index:col});notify(colName(col)+' কলাম সম্পূর্ণ সিলেক্ট হয়েছে');};
  const selectWholeRow=(row)=>{const id=positionToCell(1,row);setSelected(id);setFormula(cells[id]||'');setSelectionBand({axis:'row',index:row});notify(row+' নম্বর Row সম্পূর্ণ সিলেক্ট হয়েছে');};
