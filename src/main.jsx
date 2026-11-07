@@ -222,7 +222,7 @@ function ExcelEditor({onBack}){
  const [initialWorkbook]=React.useState(loadSavedWorkbook);
  const [isRestoring,setIsRestoring]=React.useState(true);
  const [isImporting,setIsImporting]=React.useState(false);
- React.useEffect(()=>{let live=true;try{const req=indexedDB.open('SmartOfficeWorkbookDB',1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('workbooks'))req.result.createObjectStore('workbooks')};req.onsuccess=()=>{const db=req.result,tx=db.transaction('workbooks','readonly'),get=tx.objectStore('workbooks').get('current');get.onsuccess=()=>{if(live){const disk=get.result;const local=initialWorkbook;const diskTime=Date.parse(disk?.savedAt||'')||0;const localTime=Date.parse(local?.savedAt||'')||0;const d=(local&&localTime>diskTime)?local:(disk||local);if(d){setSheetStore(d.sheets||{[d.sheet||'Sheet1']:{cells:d.cells||{},cellStyles:d.cellStyles||{}}});setCells(d.cells||{});setCellStyles(d.cellStyles||{});setSheet(d.sheet||'Sheet1');setWorkbookName(d.workbookName||'Book1');setChart(d.chart||null);setPivot(d.pivot||null);setRowHeights(d.rowHeights||{});setColumnWidths(d.columnWidths||{});setHiddenRows(d.hiddenRows||[]);setHiddenCols(d.hiddenCols||[]);setMergedRanges(d.mergedRanges||[]);setFilterConfig(d.filterConfig||null);setFilter(!!d.filterConfig)}}if(live)setIsRestoring(false);db.close()};get.onerror=()=>{if(live)setIsRestoring(false);db.close()}};req.onerror=()=>{if(live)setIsRestoring(false)}}catch{setIsRestoring(false)}return()=>{live=false}},[]);
+ React.useEffect(()=>{let live=true;try{const req=indexedDB.open('SmartOfficeWorkbookDB',1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('workbooks'))req.result.createObjectStore('workbooks')};req.onsuccess=()=>{const db=req.result,tx=db.transaction('workbooks','readonly'),get=tx.objectStore('workbooks').get('current');get.onsuccess=()=>{if(live){const disk=get.result;const local=initialWorkbook;const diskTime=Date.parse(disk?.savedAt||'')||0;const localTime=Date.parse(local?.savedAt||'')||0;const d=(local&&localTime>diskTime)?local:(disk||local);if(d){setSheetStore(d.sheets||{[d.sheet||'Sheet1']:{cells:d.cells||{},cellStyles:d.cellStyles||{}}});setCells(d.cells||{});setCellStyles(d.cellStyles||{});setSheet(d.sheet||'Sheet1');setWorkbookName(d.workbookName||'Book1');setChart(d.chart||null);setPivot(d.pivot||null);setRowHeights(d.rowHeights||{});setColumnWidths(d.columnWidths||{});setHiddenRows(d.hiddenRows||[]);setHiddenCols(d.hiddenCols||[]);setMergedRanges(d.mergedRanges||[]);setFilterConfig(d.filterConfig||null);setDataValidations(d.dataValidations||{});setFilter(!!d.filterConfig)}}if(live)setIsRestoring(false);db.close()};get.onerror=()=>{if(live)setIsRestoring(false);db.close()}};req.onerror=()=>{if(live)setIsRestoring(false)}}catch{setIsRestoring(false)}return()=>{live=false}},[]);
  const [active,setActive]=React.useState('Home');
  const [menuOpen,setMenuOpen]=React.useState(false);
  const [selected,setSelected]=React.useState('A1');
@@ -261,6 +261,7 @@ function ExcelEditor({onBack}){
  const [mergedRanges,setMergedRanges]=React.useState(()=>initialWorkbook?.mergedRanges||[]);
  const [mergedHistory,setMergedHistory]=React.useState(()=>[initialWorkbook?.mergedRanges||[]]);
  const [filterConfig,setFilterConfig]=React.useState(null);
+ const [dataValidations,setDataValidations]=React.useState(()=>initialWorkbook?.dataValidations||{});
  const colName=n=>{let s='';while(n>0){let r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}return s};
  const notify=t=>{setNotice(t);setTimeout(()=>setNotice(''),1800)};
  const [confirmExit,setConfirmExit]=React.useState(false);
@@ -280,7 +281,7 @@ function ExcelEditor({onBack}){
   return()=>{active=false;window.removeEventListener('popstate',onPopState);window.removeEventListener('keydown',onKeyDown);nativeBackListener?.remove?.()};
  },[]);
 
- React.useEffect(()=>{if(isRestoring)return;const timer=setTimeout(()=>{const all={...sheetStore,[sheet]:{cells,cellStyles}};setSheetStore(all);const data={sheets:all,cells,cellStyles,sheet,workbookName,chart,pivot,rowHeights,columnWidths,hiddenRows,hiddenCols,mergedRanges,filterConfig,savedAt:new Date().toISOString()};try{localStorage.setItem('smartoffice-workbook',JSON.stringify(data))}catch{};try{const request=indexedDB.open('SmartOfficeWorkbookDB',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('workbooks'))request.result.createObjectStore('workbooks')};request.onsuccess=()=>{const db=request.result,tx=db.transaction('workbooks','readwrite');tx.objectStore('workbooks').put(data,'current');tx.oncomplete=()=>db.close();tx.onerror=()=>{db.close();notify('Workbook auto-save failed. Please export a backup')}};request.onerror=()=>notify('Device storage unavailable. Please export a backup')}catch{notify('Device storage unavailable. Please export a backup')}},500);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName,chart,pivot,rowHeights,columnWidths,hiddenRows,hiddenCols,mergedRanges,filterConfig,isRestoring]);
+ React.useEffect(()=>{if(isRestoring)return;const timer=setTimeout(()=>{const all={...sheetStore,[sheet]:{cells,cellStyles}};setSheetStore(all);const data={sheets:all,cells,cellStyles,sheet,workbookName,chart,pivot,rowHeights,columnWidths,hiddenRows,hiddenCols,mergedRanges,filterConfig,dataValidations,savedAt:new Date().toISOString()};try{localStorage.setItem('smartoffice-workbook',JSON.stringify(data))}catch{};try{const request=indexedDB.open('SmartOfficeWorkbookDB',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('workbooks'))request.result.createObjectStore('workbooks')};request.onsuccess=()=>{const db=request.result,tx=db.transaction('workbooks','readwrite');tx.objectStore('workbooks').put(data,'current');tx.oncomplete=()=>db.close();tx.onerror=()=>{db.close();notify('Workbook auto-save failed. Please export a backup')}};request.onerror=()=>notify('Device storage unavailable. Please export a backup')}catch{notify('Device storage unavailable. Please export a backup')}},500);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName,chart,pivot,rowHeights,columnWidths,hiddenRows,hiddenCols,mergedRanges,filterConfig,dataValidations,isRestoring]);
  const selectCell=(id)=>{setSelected(id);setFormula(cells[id]??'');setSelectionBand(null)};
  const selectWholeColumn=(col)=>{const id=positionToCell(col,1);setSelected(id);setFormula(cells[id]??'');setSelectionBand({axis:'col',index:col});notify(colName(col)+' কলাম সম্পূর্ণ সিলেক্ট হয়েছে');};
  const selectWholeRow=(row)=>{const id=positionToCell(1,row);setSelected(id);setFormula(cells[id]??'');setSelectionBand({axis:'row',index:row});notify(row+' নম্বর Row সম্পূর্ণ সিলেক্ট হয়েছে');};
@@ -291,6 +292,16 @@ function ExcelEditor({onBack}){
   setHistoryIndex(i=>Math.min(i+1,100));
  };
  const updateCell=(id,value)=>{
+  const rule=dataValidations[id];
+  if(rule){
+   const raw=String(value??'');
+   if(raw.trim()!==''){
+    let valid=true,message='';
+    if(rule.type==='list'){valid=rule.values.includes(raw.trim());message='এই সেলে অনুমোদিত তালিকার একটি মান লিখুন: '+rule.values.join(', ')}
+    else if(rule.type==='whole'||rule.type==='decimal'){const n=Number(raw);valid=Number.isFinite(n)&&(rule.type!=='whole'||Number.isInteger(n))&&n>=rule.min&&n<=rule.max;message='মান '+rule.min+' থেকে '+rule.max+(rule.type==='whole'?' এর মধ্যে পূর্ণসংখ্যা':' এর মধ্যে সংখ্যা')+' হতে হবে'}
+    if(!valid){notify(message);return}
+   }
+  }
   const next={...cells,[id]:value};
   setCells(next);recordHistory(next);
  };
@@ -669,6 +680,17 @@ function ExcelEditor({onBack}){
    const removed=new Set(remove),next={};for(const [addr,val] of Object.entries(cells)){const p=cellToPosition(addr);if(!p)continue;const shift=remove.filter(r=>r<p.row).length;if(!removed.has(p.row))next[positionToCell(p.col,p.row-shift)]=val}
    const styles={};for(const [addr,val] of Object.entries(cellStyles)){const p=cellToPosition(addr);if(!p)continue;const shift=remove.filter(r=>r<p.row).length;if(!removed.has(p.row))styles[positionToCell(p.col,p.row-shift)]=val}
    recordHistory(next,styles);setCells(next);setCellStyles(styles);notify(remove.length+'টি duplicate row বাদ');return;
+  }
+  if(name==='Data Validation'){
+   const mode=window.prompt('Validation type লিখুন: list / whole / decimal / clear','list');if(mode===null)return;
+   const b=getSelectionBounds(),next={...dataValidations};
+   if(mode.toLowerCase()==='clear'){for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++)delete next[positionToCell(c,r)];setDataValidations(next);notify('নির্বাচিত সেলের Validation সরানো হয়েছে');return}
+   let rule;
+   if(mode.toLowerCase()==='list'){const input=window.prompt('অনুমোদিত মানগুলো কমা দিয়ে লিখুন (যেমন: Yes,No,Pending)');if(input===null)return;const values=input.split(',').map(x=>x.trim()).filter(Boolean);if(!values.length){notify('তালিকা খালি রাখা যাবে না');return}rule={type:'list',values}}
+   else if(mode.toLowerCase()==='whole'||mode.toLowerCase()==='decimal'){const min=Number(window.prompt('সর্বনিম্ন মান','0')),max=Number(window.prompt('সর্বোচ্চ মান','100'));if(!Number.isFinite(min)||!Number.isFinite(max)||min>max){notify('সঠিক সর্বনিম্ন ও সর্বোচ্চ মান দিন');return}rule={type:mode.toLowerCase(),min,max}}
+   else{notify('list, whole, decimal অথবা clear লিখুন');return}
+   for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++)next[positionToCell(c,r)]=rule;
+   setDataValidations(next);notify('নির্বাচিত সেলে Data Validation চালু হয়েছে');return;
   }
   if(name==='Clear Filter'){setFilter(false);setFilterConfig(null);notify('Filter সরানো হয়েছে');return}
   if(name==='Normal'||name==='Page Layout'||name==='Page Break'){notify(name+' view নির্বাচিত');return}
