@@ -312,8 +312,9 @@ function ExcelEditor({onBack}){
   if(clipboard.kind==='range'){pasteMatrix(clipboard.matrix,clipboard.stylesMatrix||null);return}
   pasteMatrix([[clipboard.value]]);
  };
- const shiftCells=(axis,at,remove=false)=>{
-  const remap=(source)=>{const out={};for(const [key,value] of Object.entries(source)){const p=cellToPosition(key);if(!p)continue;const n=axis==='row'?p.row:p.col;if(remove&&n===at)continue;const moved=remove?(n>at?n-1:n):(n>=at?n+1:n);const dest=axis==='row'?positionToCell(p.col,moved):positionToCell(moved,p.row);out[dest]=value;}return out;};
+ const shiftCells=(axis,at,remove=false,count=1)=>{
+  const amount=Math.max(1,Math.floor(Number(count)||1));
+  const remap=(source)=>{const out={};for(const [key,value] of Object.entries(source)){const p=cellToPosition(key);if(!p)continue;const n=axis==='row'?p.row:p.col;if(remove&&n>=at&&n<at+amount)continue;const moved=remove?(n>=at+amount?n-amount:n):(n>=at?n+amount:n);const dest=axis==='row'?positionToCell(p.col,moved):positionToCell(moved,p.row);out[dest]=value;}return out;};
   const next=remap(cells),styles=remap(cellStyles);setCells(next);setCellStyles(styles);setCellHistory(h=>[...h.slice(0,historyIndex+1),next].slice(-101));setHistoryIndex(i=>Math.min(i+1,100));setFormula(next[selected]??'');notify((remove?'Deleted ':'Inserted ')+(axis==='row'?'row':'column'));
  };
  const updateStyle=(patch)=>setCellStyles(p=>({...p,[selected]:{...(p[selected]||{}),...patch}}));
@@ -583,7 +584,7 @@ function ExcelEditor({onBack}){
   if(['General','Number','Currency','Accounting','Percentage','Date','Time','Fraction','Scientific','Text'].includes(name)){setFormat(name);return}
   if(name==='Increase Decimal'||name==='Decrease Decimal'){const old=Number(cellStyles[selected]?.decimalPlaces??2),decimalPlaces=Math.max(0,Math.min(10,old+(name==='Increase Decimal'?1:-1)));applyStyleToSelection({decimalPlaces});return}
   if(name==='Insert Rows'||name==='Delete Rows'||name==='Insert Columns'||name==='Delete Columns'){
-   const p=cellToPosition(selected);if(!p)return;const axis=name.includes('Rows')?'row':'col',remove=name.startsWith('Delete'),bounds=getSelectionBounds();const at=axis==='row'?(selectionBand?.axis==='row'?Number(selectionBand.index):bounds.minRow):(selectionBand?.axis==='col'?Number(selectionBand.index):bounds.minCol);shiftCells(axis,at,remove);if(remove){setSelected(axis==='row'?positionToCell(p.col,Math.max(1,at)):positionToCell(Math.max(1,at),p.row));setSelectionBand(null)}return;
+   const p=cellToPosition(selected);if(!p)return;const axis=name.includes('Rows')?'row':'col',remove=name.startsWith('Delete'),bounds=getSelectionBounds();const at=axis==='row'?(selectionBand?.axis==='row'?Number(selectionBand.index):bounds.minRow):(selectionBand?.axis==='col'?Number(selectionBand.index):bounds.minCol);const count=selectionBand?.axis==='range'?(axis==='row'?bounds.maxRow-bounds.minRow+1:bounds.maxCol-bounds.minCol+1):1;shiftCells(axis,at,remove,count);if(remove){setSelected(axis==='row'?positionToCell(p.col,Math.max(1,at)):positionToCell(Math.max(1,at),p.row));setSelectionBand(null)}return;
   }
   if(name==='Row Height'||name==='Column Width'){const p=cellToPosition(selected);if(!p)return;const value=Number(window.prompt(name==='Row Height'?'Row height (px):':'Column width (px):',name==='Row Height'?(rowHeights[p.row]||32):(columnWidths[p.col]||110)));if(!Number.isFinite(value)||value<10||value>500){notify('মান ১০ থেকে ৫০০-এর মধ্যে দিন');return}if(name==='Row Height')setRowHeights(v=>({...v,[p.row]:value}));else setColumnWidths(v=>({...v,[p.col]:value}));return}
   if(name==='AutoFit Row Height'){setRowHeights(v=>({...v,[cellToPosition(selected)?.row||1]:44}));notify('Row height AutoFit করা হয়েছে');return}
