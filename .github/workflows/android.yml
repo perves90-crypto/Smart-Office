@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies and build web app
         run: |
           npm install
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/app
           npm run build
           npx cap init "Smart Office" "com.smartoffice.app" --web-dir=dist
           npx cap add android
