@@ -426,6 +426,8 @@ function ExcelEditor({onBack}){
     if(!rowFields.length&&!columnFields.length)throw Error('কমপক্ষে Rows অথবা Columns-এর একটি ঘরে Field দিন');
     const matrix=readRange(pivotWizard.range),headers=pivotWizard.headers;
     const allFields=[...rowFields,...columnFields],fieldIndexes=allFields.map(h=>headers.indexOf(h));
+    if(fieldIndexes.some(i=>i<0))throw Error('নির্বাচিত Field ডেটার Header-এর সঙ্গে মিলছে না');
+    if(new Set(allFields).size!==allFields.length)throw Error('একই Field একাধিকবার নির্বাচন করা যাবে না');
     const aggregation=pivotWizard.aggregation||'count',valueField=pivotWizard.valueField||'';
     const valueIndex=valueField?headers.indexOf(valueField):-1;
     if(aggregation!=='count'&&valueIndex<0)throw Error('যোগ/গড় করার জন্য Values থেকে একটি সংখ্যার Field নির্বাচন করুন');
@@ -433,6 +435,7 @@ function ExcelEditor({onBack}){
     const cleanLabel=v=>String(v??'').replace(/\\s+/g,' ').trim()||'(blank)';
     const groupKey=values=>JSON.stringify(values.map(v=>v.toLocaleLowerCase()));
     for(const record of matrix.slice(1)){
+     if(record.every(v=>String(v??'').trim()===''))continue;
      const values=fieldIndexes.map(i=>cleanLabel(record[i]));
      const key=groupKey(values);
      if(!grouped.has(key))grouped.set(key,{values,aggregate:0,recordCount:0,valueCount:0,parentKey:values[0].toLocaleLowerCase()});
@@ -440,9 +443,10 @@ function ExcelEditor({onBack}){
      if(aggregation==='count'){item.aggregate++;item.valueCount++;}
      else {const raw=record[valueIndex],num=numericValue(raw);if(num!==null){item.aggregate+=num;item.valueCount++;}}
     }
+    if(!grouped.size)throw Error('নির্বাচিত Range-এ কোনো ডেটা রেকর্ড পাওয়া যায়নি');
     const detailRows=[...grouped.values()].map(item=>({...item,result:aggregation==='average'?(item.valueCount?item.aggregate/item.valueCount:0):item.aggregate})).sort((a,b)=>JSON.stringify(a.values).localeCompare(JSON.stringify(b.values),'en',{numeric:true,sensitivity:'base'}));
     const rows=[];
-    if(allFields.length>1){
+    if(rowFields.length>1){
      let currentParent=null,currentParentKey=null,parentItems=[];
      const addParentSubtotal=()=>{
       if(currentParentKey===null)return;
