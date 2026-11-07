@@ -222,6 +222,26 @@ function ExcelEditor({onBack}){
  const [filter,setFilter]=React.useState(false);
  const colName=n=>{let s='';while(n>0){let r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}return s};
  const notify=t=>{setNotice(t);setTimeout(()=>setNotice(''),1800)};
+ const [confirmExit,setConfirmExit]=React.useState(false);
+ const exitHandler=React.useRef(null);
+ exitHandler.current=()=>{
+  if(menuOpen){setMenuOpen(false);return}
+  if(pivotWizard){setPivotWizard(null);return}
+  if(editingCell){setEditingCell(null);return}
+  if(chart){setChart(null);return}
+  if(pivot){setPivot(null);return}
+  setConfirmExit(true);
+ };
+ const requestExit=()=>exitHandler.current?.();
+ React.useEffect(()=>{
+  window.history.pushState({smartExcelBack:true},'');
+  const onPopState=()=>{exitHandler.current?.();window.history.pushState({smartExcelBack:true},'')};
+  const onKeyDown=e=>{if(e.key==='Escape'||e.key==='BrowserBack'){e.preventDefault();exitHandler.current?.()}};
+  window.addEventListener('popstate',onPopState);
+  window.addEventListener('keydown',onKeyDown);
+  return()=>{window.removeEventListener('popstate',onPopState);window.removeEventListener('keydown',onKeyDown)};
+ },[]);
+
  React.useEffect(()=>{if(isRestoring)return;const timer=setTimeout(()=>{const all={...sheetStore,[sheet]:{cells,cellStyles}};setSheetStore(all);const data={sheets:all,cells,cellStyles,sheet,workbookName,chart,pivot,savedAt:new Date().toISOString()};try{const request=indexedDB.open('SmartOfficeWorkbookDB',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('workbooks'))request.result.createObjectStore('workbooks')};request.onsuccess=()=>{const db=request.result,tx=db.transaction('workbooks','readwrite');tx.objectStore('workbooks').put(data,'current');tx.oncomplete=()=>db.close();tx.onerror=()=>{db.close();notify('Workbook auto-save failed. Please export a backup')}};request.onerror=()=>notify('Device storage unavailable. Please export a backup')}catch{notify('Device storage unavailable. Please export a backup')}},500);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName,chart,pivot,isRestoring]);
  const selectCell=(id)=>{setSelected(id);setFormula(cells[id]||'');setSelectionBand(null)};
  const selectWholeColumn=(col)=>{const id=positionToCell(col,1);setSelected(id);setFormula(cells[id]||'');setSelectionBand({axis:'col',index:col});notify(colName(col)+' কলাম সম্পূর্ণ সিলেক্ট হয়েছে');};
@@ -522,7 +542,7 @@ function ExcelEditor({onBack}){
  const usedMaxCol=Object.keys(cells).reduce((m,key)=>Math.max(m,cellToPosition(key)?.col||0),0);
  const rows=Array.from({length:visibleRows},(_,i)=>i+1),cols=Array.from({length:visibleCols},(_,i)=>i+1);
  return <div className="excelApp">
-  <header className="excelTop"><button className="backBtn" onClick={onBack}>‹</button><div className="excelTitle"><b><Table2 size={19}/> Smart Excel</b><small>Workbook • {sheet}</small></div><button className="topIcon" onClick={()=>action('Save')}><Save size={19}/></button><button className="topIcon" onClick={()=>notify('More workbook options')}><Settings size={19}/></button></header>
+  <header className="excelTop"><button className="backBtn" onClick={requestExit} aria-label="Back">‹</button><div className="excelTitle"><b><Table2 size={19}/> Smart Excel</b><small>Workbook • {sheet}</small></div><button className="topIcon" onClick={()=>action('Save')}><Save size={19}/></button><button className="topIcon" onClick={()=>notify('More workbook options')}><Settings size={19}/></button></header>
   <div className="workbookBar"><span className="fileBadge"><FileSpreadsheet size={16}/></span><input aria-label="Workbook name" value={workbookName} onChange={e=>setWorkbookName(e.target.value)} /><span className="savedState">● Saved locally</span></div>
   <div className="ribbonStrip">{ribbonData[active].map(group=><div className="ribbonGroup" key={group.group}><div className="ribbonButtons">{group.items.map(([label,Icon])=><button key={label} className="ribbonAction" onClick={()=>action(label)} title={label}><Icon size={17}/><span>{label}</span></button>)}</div><small>{group.group}</small></div>)}</div>
   {showFormula&&<div className="formulaBar"><span className="cellRef">{selected}</span><span className="fx">fx</span><input value={formula} onChange={e=>{setFormula(e.target.value);updateCell(selected,e.target.value)}} placeholder="Enter value or formula"/></div>}
@@ -536,7 +556,15 @@ function ExcelEditor({onBack}){
   {menuOpen&&<><div className="menuScrim" onClick={()=>setMenuOpen(false)}></div><div className="ribbonMenuPanel"><div className="menuPanelTitle">Workbook Menu <button onClick={()=>setMenuOpen(false)}><X size={18}/></button></div>{menus.map(([name,Icon])=><button key={name} className={'menuChoice '+(active===name?'chosen':'')} onClick={()=>{setActive(name);setMenuOpen(false)}}><Icon size={19}/><span>{name}</span>{active===name&&<Check size={16}/>}</button>)}</div></>}
   {isImporting&&<div className="excelToast">বড় Excel ফাইল প্রসেস হচ্ছে… অনুগ্রহ করে অপেক্ষা করুন</div>}
   <input id="excelFileInput" type="file" hidden accept=".xls,.xlsx,.csv" onChange={e=>{if(e.target.files?.[0])importWorkbook(e.target.files[0]);e.target.value=''}}/>
-  {notice&&<div className="excelToast">{notice}</div>}
+  {notice&&<div className="excelToast">{notice}</div>}\n  {confirmExit&&<div role="dialog" aria-modal="true" aria-labelledby="exitTitle" style={{position:'fixed',inset:0,zIndex:10000,background:'rgba(15,23,42,.62)',display:'flex',alignItems:'center',justifyContent:'center',padding:22}}>
+   <div style={{width:'100%',maxWidth:360,background:'#fff',color:'#172033',borderRadius:18,padding:22,boxShadow:'0 18px 60px rgba(0,0,0,.3)'}}>
+    <h3 id="exitTitle" style={{margin:'0 0 10px',fontSize:19}}>Excel বন্ধ করবেন?</h3>
+    <p style={{margin:'0 0 18px',lineHeight:1.55,fontSize:14}}>Excel থেকে বের হওয়ার আগে ফাইলটি Save করতে চান? Save করলে একটি Excel ফাইল ডাউনলোড হবে।</p>
+    <button onClick={()=>{exportWorkbook('xlsx');setConfirmExit(false);setTimeout(onBack,500)}} style={{width:'100%',padding:13,border:0,borderRadius:10,background:'#16834b',color:'#fff',fontWeight:700,marginBottom:9}}>Save & Exit</button>
+    <button onClick={()=>{setConfirmExit(false);onBack()}} style={{width:'100%',padding:12,border:'1px solid #d1d5db',borderRadius:10,background:'#fff',color:'#b42318',fontWeight:600,marginBottom:9}}>Exit Without Saving</button>
+    <button onClick={()=>setConfirmExit(false)} style={{width:'100%',padding:12,border:0,borderRadius:10,background:'#eef2f7',color:'#172033',fontWeight:600}}>Cancel — Excel-এ থাকুন</button>
+   </div>
+  </div>}
  </div>
 }
 function App(){
