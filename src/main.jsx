@@ -347,7 +347,7 @@ function ExcelEditor({onBack}){
  };
  const pasteCell=()=>{
   if(!clipboard){notify('আগে Copy করুন অথবা বাইরের লেখা Paste করুন');return}
-  if(clipboard.kind==='style'){setCellStyles(p=>({...p,[selected]:{...clipboard.style}}));notify('Format applied');return}
+  if(clipboard.kind==='style'){const nextStyles={...cellStyles,[selected]:{...clipboard.style}};setCellStyles(nextStyles);recordHistory(cells,nextStyles);notify('Format applied');return}
   if(clipboard.kind==='range'){pasteMatrix(clipboard.matrix,clipboard.stylesMatrix||null);return}
   pasteMatrix([[clipboard.value]]);
  };
@@ -356,16 +356,16 @@ function ExcelEditor({onBack}){
   const remap=(source)=>{const out={};for(const [key,value] of Object.entries(source)){const p=cellToPosition(key);if(!p)continue;const n=axis==='row'?p.row:p.col;if(remove&&n>=at&&n<at+amount)continue;const moved=remove?(n>=at+amount?n-amount:n):(n>=at?n+amount:n);const dest=axis==='row'?positionToCell(p.col,moved):positionToCell(moved,p.row);out[dest]=value;}return out;};
   const next=remap(cells),styles=remap(cellStyles);setCells(next);setCellStyles(styles);recordHistory(next,styles);setFormula(next[selected]??'');notify((remove?'Deleted ':'Inserted ')+(axis==='row'?'row':'column'));
  };
- const updateStyle=(patch)=>setCellStyles(p=>({...p,[selected]:{...(p[selected]||{}),...patch}}));
+ const updateStyle=(patch)=>{const next={...cellStyles,[selected]:{...(cellStyles[selected]||{}),...patch}};setCellStyles(next);recordHistory(cells,next)};
  const applyStyleToSelection=(patch)=>{
   const b=getSelectionBounds(),next={...cellStyles};
   for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++){const id=positionToCell(c,r);next[id]={...(next[id]||{}),...patch};}
-  setCellStyles(next);notify('নির্বাচিত সেলের ফরম্যাট পরিবর্তন হয়েছে');
+  setCellStyles(next);recordHistory(cells,next);notify('নির্বাচিত সেলের ফরম্যাট পরিবর্তন হয়েছে');
  };
  const clearSelection=(mode)=>{
   const b=getSelectionBounds(),nextCells={...cells},nextStyles={...cellStyles};
   for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++){const id=positionToCell(c,r);if(mode!=='formats')delete nextCells[id];if(mode!=='contents')delete nextStyles[id];}
-  setCells(nextCells);setCellStyles(nextStyles);setFormula(nextCells[selected]??'');notify(mode==='contents'?'নির্বাচিত সেলের লেখা মুছে ফেলা হয়েছে':mode==='formats'?'নির্বাচিত সেলের ফরম্যাট মুছে ফেলা হয়েছে':'নির্বাচিত সেল সম্পূর্ণ পরিষ্কার হয়েছে');
+  setCells(nextCells);setCellStyles(nextStyles);recordHistory(nextCells,nextStyles);setFormula(nextCells[selected]??'');notify(mode==='contents'?'নির্বাচিত সেলের লেখা মুছে ফেলা হয়েছে':mode==='formats'?'নির্বাচিত সেলের ফরম্যাট মুছে ফেলা হয়েছে':'নির্বাচিত সেল সম্পূর্ণ পরিষ্কার হয়েছে');
  };
  const setFormat=(format)=>{
   const formats={General:null,Number:'number',Currency:'currency',Accounting:'accounting',Percentage:'percent',Date:'date',Time:'time',Fraction:'fraction',Scientific:'scientific',Text:'text'};
@@ -438,7 +438,7 @@ function ExcelEditor({onBack}){
    if(!names.length)throw new Error('ফাইলে কোনো Worksheet পাওয়া যায়নি');
    const first=names.includes(activeName)?activeName:names[0];
    const next=imported[first]?.cells||{};
-   setSheetStore(imported);setCells(next);setCellHistory([{},next]);setHistoryIndex(1);setCellStyles(imported[first]?.cellStyles||{});setSheet(first);setSelected('A1');setFormula(next.A1??'');setWorkbookName(file.name.replace(/\.(xlsx|xls|csv)$/i,''));setVisibleRows(100);setVisibleCols(10);notify('সফল! '+names.length+'টি Sheet Open হয়েছে');
+   setSheetStore(imported);setCells(next);setCellHistory([{},next]);setStyleHistory([{},imported[first]?.cellStyles||{}]);setHistoryIndex(1);setCellStyles(imported[first]?.cellStyles||{});setSheet(first);setSelected('A1');setFormula(next.A1??'');setWorkbookName(file.name.replace(/\.(xlsx|xls|csv)$/i,''));setVisibleRows(100);setVisibleCols(10);notify('সফল! '+names.length+'টি Sheet Open হয়েছে');
   };
   const parseOnMainThread=(buffer)=>{
    try{
@@ -503,10 +503,10 @@ function ExcelEditor({onBack}){
    pivot.rows.forEach((row,r)=>{row.values.forEach((v,c)=>{out[positionToCell(c+1,r+2)]=v;});out[positionToCell(headers.length,r+2)]=row.result??row.aggregate??0;});
    const totalRow=pivot.rows.length+2;out[positionToCell(1,totalRow)]='Grand Total';out[positionToCell(headers.length,totalRow)]=pivot.grandTotal;
    const all={...sheetStore,[sheet]:{cells,cellStyles},[name]:{cells:out,cellStyles:{}}};
-   setSheetStore(all);setCells(out);setCellStyles({});setCellHistory([out]);setHistoryIndex(0);setSheet(name);setSelected('A1');setFormula('');setPivot(null);notify('PivotTable নতুন Sheet-এ Export হয়েছে');
+   setSheetStore(all);setCells(out);setCellStyles({});setCellHistory([out]);setStyleHistory([{}]);setHistoryIndex(0);setSheet(name);setSelected('A1');setFormula('');setPivot(null);notify('PivotTable নতুন Sheet-এ Export হয়েছে');
   };
-  const addSheet=()=>{let n=Object.keys(sheetStore).length+1,name='Sheet'+n;while(sheetStore[name]){n++;name='Sheet'+n;}setSheetStore(p=>({...p,[sheet]:{cells,cellStyles},[name]:{cells:{},cellStyles:{}}}));setCells({});setCellStyles({});setCellHistory([{}]);setHistoryIndex(0);setSheet(name);setSelected('A1');setFormula('');notify('New sheet created');};
- const switchSheet=(name)=>{if(name===sheet)return;const all={...sheetStore,[sheet]:{cells,cellStyles}};const next=all[name]||{cells:{},cellStyles:{}};setSheetStore(all);setCells(next.cells);setCellStyles(next.cellStyles);setCellHistory([next.cells]);setHistoryIndex(0);setSheet(name);setSelected('A1');setFormula(next.cells.A1||'');};
+  const addSheet=()=>{let n=Object.keys(sheetStore).length+1,name='Sheet'+n;while(sheetStore[name]){n++;name='Sheet'+n;}setSheetStore(p=>({...p,[sheet]:{cells,cellStyles},[name]:{cells:{},cellStyles:{}}}));setCells({});setCellStyles({});setCellHistory([{}]);setStyleHistory([{}]);setHistoryIndex(0);setSheet(name);setSelected('A1');setFormula('');notify('New sheet created');};
+ const switchSheet=(name)=>{if(name===sheet)return;const all={...sheetStore,[sheet]:{cells,cellStyles}};const next=all[name]||{cells:{},cellStyles:{}};setSheetStore(all);setCells(next.cells);setCellStyles(next.cellStyles);setCellHistory([next.cells]);setStyleHistory([next.cellStyles||{}]);setHistoryIndex(0);setSheet(name);setSelected('A1');setFormula(next.cells.A1||'');};
  const renameSheet=()=>{const name=window.prompt('Enter new sheet name:',sheet);if(!name||name===sheet)return;if(name.length>31||/[\\\\/?*\\[\\]:]/.test(name)){notify('Sheet name is invalid (max 31 characters)');return}if(sheetStore[name]){notify('That sheet name already exists');return}const all={...sheetStore,[sheet]:{cells,cellStyles}};all[name]=all[sheet];delete all[sheet];setSheetStore(all);setSheet(name);notify('Sheet renamed');};
  const deleteSheet=()=>{const names=Object.keys({...sheetStore,[sheet]:{cells,cellStyles}});if(names.length<=1){notify('At least one sheet is required');return}if(!window.confirm('Delete sheet '+sheet+'?'))return;const all={...sheetStore,[sheet]:{cells,cellStyles}};delete all[sheet];const nextName=Object.keys(all)[0],next=all[nextName];setSheetStore(all);setSheet(nextName);setCells(next.cells);setCellStyles(next.cellStyles);setCellHistory([next.cells]);setHistoryIndex(0);setSelected('A1');setFormula(next.cells.A1||'');notify('Sheet deleted');};
 
@@ -605,7 +605,7 @@ function ExcelEditor({onBack}){
   if(name==='Open'){document.getElementById('excelFileInput')?.click();return}
   if(name==='Gridlines'){setShowGrid(v=>!v);return}
   if(name==='Formula Bar'){setShowFormula(v=>!v);return}
-  if(name==='New Workbook'){setCells({});setCellHistory([{}]);setHistoryIndex(0);setCellStyles({});setSheetStore({'Sheet1':{cells:{},cellStyles:{}}});setSheet('Sheet1');setSelected('A1');setFormula('');notify('New workbook created');return}
+  if(name==='New Workbook'){setCells({});setCellHistory([{}]);setStyleHistory([{}]);setHistoryIndex(0);setCellStyles({});setSheetStore({'Sheet1':{cells:{},cellStyles:{}}});setSheet('Sheet1');setSelected('A1');setFormula('');notify('New workbook created');return}
   if(name==='Bold'){applyStyleToSelection({bold:!cellStyles[selected]?.bold});return}
   if(name==='Italic'){applyStyleToSelection({italic:!cellStyles[selected]?.italic});return}
   if(name==='Underline'){applyStyleToSelection({underline:!cellStyles[selected]?.underline});return}
