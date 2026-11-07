@@ -35,6 +35,11 @@ const ribbonData = {
   {group:'Data Tools',items:[['Text to Columns',ColumnsIcon],['Remove Duplicates',Copy],['Data Validation',Check]]},
   {group:'Forecast',items:[['What-If Analysis',Calculator],['Goal Seek',BarChart3]]}
  ],
+ Formulas: [
+  {group:'Function Library',items:[['Insert Function',Calculator],['AutoSum',Calculator],['SUM',Calculator],['AVERAGE',Calculator],['COUNT',Calculator],['MAX',Calculator],['MIN',Calculator],['IF',Calculator]]},
+  {group:'Formula Auditing',items:[['Show Precedents',Search],['Show Dependents',Search],['Evaluate Formula',Check],['Error Checking',ShieldCheck]]},
+  {group:'Calculation',items:[['Calculate Now',Redo2]]}
+ ],
  Review: [
   {group:'Proofing',items:[['Spelling',Check],['Check Workbook',ClipboardCheck],['Workbook Statistics',FileSpreadsheet]]},
   {group:'Comments',items:[['New Comment',MessageSquare],['Show Comments',MessageSquare],['Notes',FileText],['Delete All Comments',X]]},
@@ -42,7 +47,7 @@ const ribbonData = {
  ]
 };
 function ColumnsIcon(){return <Table2/>}
-const menus=[['Home',Home],['File',Folder],['View',Eye],['Insert',Plus],['Data',Database],['Review',ClipboardCheck]];
+const menus=[['Home',Home],['File',Folder],['View',Eye],['Insert',Plus],['Data',Database],['Review',ClipboardCheck],['Formulas',Calculator]];
 function cellToPosition(ref){
  const m=String(ref).toUpperCase().match(/^([A-Z]+)([1-9][0-9]*)$/);if(!m)return null;
  let col=0;for(const ch of m[1])col=col*26+ch.charCodeAt(0)-64;
@@ -698,6 +703,30 @@ function ExcelEditor({onBack}){
   if(name==='Unhide Rows'){setHiddenRows([]);notify('সব লুকানো Row দেখানো হয়েছে');return}
   if(name==='Hide Columns'){const b=getSelectionBounds(),start=selectionBand?.axis==='col'?Number(selectionBand.index):b.minCol,end=selectionBand?.axis==='col'?Number(selectionBand.index):b.maxCol;setHiddenCols(v=>[...new Set([...v,...Array.from({length:end-start+1},(_,i)=>start+i)])]);return}
   if(name==='Unhide Columns'){setHiddenCols([]);notify('সব লুকানো Column দেখানো হয়েছে');return}
+  if(name==='Insert Function'||['SUM','AVERAGE','COUNT','MAX','MIN','IF'].includes(name)){
+   const fn=name==='Insert Function'?(window.prompt('Function name লিখুন (SUM, AVERAGE, COUNT, MAX, MIN, IF):','SUM')||'').trim().toUpperCase():name;
+   if(!['SUM','AVERAGE','COUNT','MAX','MIN','IF'].includes(fn)){notify('এই Function এখনো সমর্থিত নয়');return}
+   const p=cellToPosition(selected),defaultRange=p&&p.row>1?positionToCell(p.col,1)+':'+positionToCell(p.col,p.row-1):'A1:A1';
+   const range=window.prompt(fn+'-এর Range লিখুন (যেমন A1:A10):',defaultRange);if(range===null)return;
+   const clean=range.trim().replace(/\s+/g,'');if(!/^[A-Z]{1,3}[1-9][0-9]*(:[A-Z]{1,3}[1-9][0-9]*)?$/i.test(clean)){notify('সঠিক Cell বা Range লিখুন');return}
+   let formula='='+fn+'('+clean.toUpperCase()+')';
+   if(fn==='IF'){const condition=window.prompt('IF condition লিখুন (যেমন A1>10):','A1>10');if(condition===null)return;const yes=window.prompt('True হলে কী দেখাবে?','Yes');if(yes===null)return;const no=window.prompt('False হলে কী দেখাবে?','No');if(no===null)return;formula='=IF('+condition+',"'+yes.replace(/"/g,'""')+'","'+no.replace(/"/g,'""')+'")'}
+   setFormula(formula);updateCell(selected,formula);notify(fn+' formula যুক্ত হয়েছে');return;
+  }
+  if(name==='Show Precedents'||name==='Show Dependents'){
+   const refs=new Set(),escape=selected.replace(/[$]/g,'').toUpperCase();
+   if(name==='Show Precedents'){const raw=String(cells[selected]??'');const re=/\$?[A-Z]{1,3}\$?[1-9][0-9]*/gi;for(const match of raw.matchAll(re))refs.add(match[0].replace(/\$/g,'').toUpperCase())}
+   else {const re=new RegExp('\\$?'+escape.replace(/([A-Z]+)([0-9]+)/,'$1\\$?$2')+'\\b','i');for(const [addr,value] of Object.entries(cells))if(typeof value==='string'&&value.startsWith('=')&&re.test(value))refs.add(addr)}
+   const list=[...refs];window.alert(name+' — '+selected+'\\n'+(list.length?list.join(', '):'কোনো সম্পর্কিত Cell পাওয়া যায়নি'));return;
+  }
+  if(name==='Evaluate Formula'){
+   try{const value=calculateCell(selected,cells);window.alert(selected+' = '+String(value))}catch(error){window.alert('Formula Error: '+error.message)}return;
+  }
+  if(name==='Error Checking'){
+   const errors=[];for(const [addr,value] of Object.entries(cells))if(typeof value==='string'&&value.trim().startsWith('=')){try{const result=calculateCell(addr,cells);if(typeof result==='string'&&/^#(REF|DIV\/0|VALUE|NAME|NUM|N\/A|CYCLE|ERROR)/.test(result))errors.push(addr+': '+result)}catch(error){errors.push(addr+': '+error.message)}}
+   window.alert(errors.length?'Formula Errors ('+errors.length+')\\n'+errors.slice(0,50).join('\\n'):'কোনো Formula Error পাওয়া যায়নি');return;
+  }
+  if(name==='Calculate Now'){let count=0,errors=0;for(const [addr,value] of Object.entries(cells))if(typeof value==='string'&&value.trim().startsWith('=')){count++;try{calculateCell(addr,cells)}catch{errors++}}setCells(v=>({...v}));notify('Calculation সম্পন্ন: '+count+'টি Formula, '+errors+'টি Error');return}
   if(name==='AutoSum'){const p=cellToPosition(selected);if(p){let start=p.row-1;while(start>1&&cells[positionToCell(p.col,start-1)]!==undefined&&cells[positionToCell(p.col,start-1)]!=='')start--;const end=p.row-1;const ref=end>=start?positionToCell(p.col,start)+':'+positionToCell(p.col,end):positionToCell(p.col,1)+':'+positionToCell(p.col,1);const value='=SUM('+ref+')';setFormula(value);updateCell(selected,value);notify('SUM formula added')}return}
   if(name==='Fill Down'||name==='Fill Right'){fillSelection(name==='Fill Down'?'down':'right');return}
   if(name==='Clear Contents'){clearSelection('contents');return}
