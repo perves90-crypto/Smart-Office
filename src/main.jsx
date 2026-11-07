@@ -129,7 +129,7 @@ function calculateFormula(source,cells,stack=[]){
    case 'AND':return flat.every(truth);
    case 'OR':return flat.some(truth);
    case 'NOT':return !truth(a);
-   case 'IFERROR':return ['#VALUE!','#DIV/0!','#REF!','#NAME?','#N/A'].includes(a)?(args[1]??''):a;
+   case 'IFERROR':return (typeof a==='number'&&!Number.isFinite(a))||['#VALUE!','#DIV/0!','#REF!','#NAME?','#N/A','#CYCLE!'].includes(a)?(args[1]??''):a;
    case 'CONCAT':case 'CONCATENATE':return flat.map(textValue).join('');
    case 'LEFT':return textValue(a).slice(0,Math.max(0,Number(b??1)));
    case 'RIGHT':return textValue(a).slice(-Math.max(0,Number(b??1)));
