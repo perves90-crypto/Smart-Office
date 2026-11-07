@@ -821,9 +821,34 @@ function ExcelEditor({onBack}){
   if(name==='Workbook Statistics'){const vals=Object.values(cells).filter(v=>v!==''&&v!==null&&v!==undefined);const nums=vals.map(Number).filter(Number.isFinite);window.alert('Cells: '+vals.length+'\\nNumbers: '+nums.length+'\\nText: '+(vals.length-nums.length)+'\\nSheets: '+(Object.keys(sheetStore).length||1));return}
   if(name==='Sort A to Z'||name==='Sort Z to A'){sortSelection(name==='Sort A to Z'?'asc':'desc');return}
   if(name==='Text to Columns'){
-   const b=getSelectionBounds(),delimiter=window.prompt('কোন চিহ্ন দিয়ে ভাগ করবেন? (কমা , / সেমিকোলন ; / স্পেস লিখুন)',' , ');if(delimiter===null)return;const sep=delimiter==='স্পেস'?' ':delimiter.trim();if(!sep){notify('Delimiter লিখুন');return}
-   const next={...cells};for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++){const addr=positionToCell(c,r),v=cells[addr];if(v===undefined)continue;String(v).split(sep).forEach((part,i)=>{next[positionToCell(c+i,r)]=part.trim()})}
-   recordHistory(next,cellStyles);setCells(next);notify('Text to Columns সম্পন্ন');return;
+   const b=getSelectionBounds();
+   const mode=window.prompt('Delimiter নির্বাচন করুন: comma (,), tab, semicolon (;), space অথবা custom লিখুন','comma');
+   if(mode===null)return;
+   let sep=mode.toLowerCase()==='comma'?',':mode.toLowerCase()==='tab'?'\\t':mode.toLowerCase()==='semicolon'?';':mode.toLowerCase()==='space'?' ':mode;
+   if(mode.toLowerCase()==='custom'){sep=window.prompt('Custom delimiter লিখুন (এক বা একাধিক অক্ষর)','|');if(sep===null)return}
+   if(!sep){notify('Delimiter সঠিক নয়');return}
+   const parse=(input)=>{
+    const out=[];let value='',quoted=false;
+    for(let i=0;i<input.length;i++){const ch=input[i];if(ch==='"'){if(quoted&&input[i+1]==='"'){value+='"';i++}else quoted=!quoted}else if(!quoted&&input.startsWith(sep,i)){out.push(value.trim());value='';i+=sep.length-1}else value+=ch}
+    out.push(value.trim());return out;
+   };
+   const next={...cells},styles={...cellStyles};let splitCount=0,overwrite=false;
+   const rows=[];
+   for(let r=b.minRow;r<=b.maxRow;r++)for(let col=b.minCol;col<=b.maxCol;col++){
+    const addr=positionToCell(col,r),raw=cells[addr];if(raw===undefined||String(raw).indexOf(sep)<0)continue;
+    const parts=parse(String(raw));if(parts.length<2)continue;
+    rows.push({r,col,addr,parts});
+    for(let j=1;j<parts.length;j++)if(cells[positionToCell(col+j,r)]!==undefined&&String(cells[positionToCell(col+j,r)])!=='')overwrite=true;
+   }
+   if(!rows.length){notify('নির্বাচিত Cell-এ এই Delimiter পাওয়া যায়নি');return}
+   if(overwrite&&!window.confirm('ডান পাশের কিছু Cell-এ আগে থেকেই Data আছে। সেগুলো Overwrite করবেন?'))return;
+   rows.forEach(({r,col,addr,parts})=>{
+    const sourceStyle=cellStyles[addr];
+    parts.forEach((part,j)=>{const target=positionToCell(col+j,r);next[target]=part;if(sourceStyle&&j>0)styles[target]={...sourceStyle};});
+    splitCount+=parts.length-1;
+   });
+   recordHistory(next,styles);setCells(next);setCellStyles(styles);
+   notify('Text to Columns সম্পন্ন: '+rows.length+'টি Cell থেকে '+splitCount+'টি অতিরিক্ত Column তৈরি হয়েছে');return;
   }
   if(name==='Remove Duplicates'){
    const b=getSelectionBounds(),seen=new Set(),remove=[];for(let r=b.minRow;r<=b.maxRow;r++){const key=Array.from({length:b.maxCol-b.minCol+1},(_,i)=>String(cells[positionToCell(b.minCol+i,r)]??'').trim().toLowerCase()).join('¦');if(key.replace(/¦/g,'')==='')continue;if(seen.has(key))remove.push(r);else seen.add(key)}
