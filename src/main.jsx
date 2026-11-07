@@ -651,6 +651,30 @@ function ExcelEditor({onBack}){
   if(name==='Sort A to Z'||name==='Sort Z to A'){sortSelection(name==='Sort A to Z'?'asc':'desc');return}
   if(name==='Filter'){applyFilter();return}
   if(name==='Select All'){setSelectionBand({axis:'all'});setSelected('A1');setFormula(cells.A1??'');notify('সম্পূর্ণ Sheet সিলেক্ট হয়েছে');return}
+  if(name==='Zoom In'){setSheetZoom(v=>Math.min(2,+(v+0.1).toFixed(2)));return}
+  if(name==='Zoom Out'){setSheetZoom(v=>Math.max(0.5,+(v-0.1).toFixed(2)));return}
+  if(name==='100%'){setSheetZoom(1);return}
+  if(name==='Print'||name==='Export PDF'){window.print();notify('Print dialog খুলেছে — PDF হিসেবে Save করতে পারবেন');return}
+  if(name==='Workbook Info'){const used=Object.values(cells).filter(v=>v!==''&&v!==null&&v!==undefined).length;window.alert('Workbook: '+workbookName+'\\nSheet: '+sheet+'\\nUsed cells: '+used+'\\nZoom: '+Math.round(sheetZoom*100)+'%');return}
+  if(name==='Workbook Statistics'){const vals=Object.values(cells).filter(v=>v!==''&&v!==null&&v!==undefined);const nums=vals.map(Number).filter(Number.isFinite);window.alert('Cells: '+vals.length+'\\nNumbers: '+nums.length+'\\nText: '+(vals.length-nums.length)+'\\nSheets: '+(Object.keys(sheetStore).length||1));return}
+  if(name==='Sort A to Z'||name==='Sort Z to A'){sortSelection(name==='Sort A to Z'?'asc':'desc');return}
+  if(name==='Text to Columns'){
+   const b=getSelectionBounds(),delimiter=window.prompt('কোন চিহ্ন দিয়ে ভাগ করবেন? (কমা , / সেমিকোলন ; / স্পেস লিখুন)',' , ');if(delimiter===null)return;const sep=delimiter==='স্পেস'?' ':delimiter.trim();if(!sep){notify('Delimiter লিখুন');return}
+   const next={...cells};for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++){const addr=positionToCell(c,r),v=cells[addr];if(v===undefined)continue;String(v).split(sep).forEach((part,i)=>{next[positionToCell(c+i,r)]=part.trim()})}
+   recordHistory(next,cellStyles);setCells(next);notify('Text to Columns সম্পন্ন');return;
+  }
+  if(name==='Remove Duplicates'){
+   const b=getSelectionBounds(),seen=new Set(),remove=[];for(let r=b.minRow;r<=b.maxRow;r++){const key=Array.from({length:b.maxCol-b.minCol+1},(_,i)=>String(cells[positionToCell(b.minCol+i,r)]??'').trim().toLowerCase()).join('¦');if(key.replace(/¦/g,'')==='')continue;if(seen.has(key))remove.push(r);else seen.add(key)}
+   if(!remove.length){notify('কোনো Duplicate Row পাওয়া যায়নি');return}if(!window.confirm(remove.length+'টি duplicate row মুছে ফেলবেন?'))return;
+   const removed=new Set(remove),next={};for(const [addr,val] of Object.entries(cells)){const p=cellToPosition(addr);if(!p)continue;const shift=remove.filter(r=>r<p.row).length;if(!removed.has(p.row))next[positionToCell(p.col,p.row-shift)]=val}
+   const styles={};for(const [addr,val] of Object.entries(cellStyles)){const p=cellToPosition(addr);if(!p)continue;const shift=remove.filter(r=>r<p.row).length;if(!removed.has(p.row))styles[positionToCell(p.col,p.row-shift)]=val}
+   recordHistory(next,styles);setCells(next);setCellStyles(styles);notify(remove.length+'টি duplicate row বাদ');return;
+  }
+  if(name==='Clear Filter'){setFilter(false);setFilterConfig(null);notify('Filter সরানো হয়েছে');return}
+  if(name==='Normal'||name==='Page Layout'||name==='Page Break'){notify(name+' view নির্বাচিত');return}
+  if(name==='Spelling'){const textValues=Object.entries(cells).filter(([,v])=>typeof v==='string'&&v.trim()).map(([a,v])=>a+': '+v);window.alert(textValues.length?textValues.slice(0,30).join('\\n'):'Sheet-এ কোনো লেখা নেই');return}
+  if(name==='New Comment'||name==='Notes'){const note=window.prompt(selected+' সেলের মন্তব্য লিখুন:');if(note!==null){applyStyleToSelection({comment:note});notify('Selected cell-এর মন্তব্য Style-এ সংরক্ষিত হয়েছে')}return}
+  if(name==='Freeze Panes'){const p=cellToPosition(selected);if(p){const rows=p.row-1,cols=p.col-1;document.documentElement.style.setProperty('--freeze-top',rows+'px');document.documentElement.style.setProperty('--freeze-left',cols+'px');notify('Freeze boundary: '+selected)}return}
   notify(name+' selected');
  };
  const usedMaxRow=Object.keys(cells).reduce((m,key)=>Math.max(m,cellToPosition(key)?.row||0),0);
