@@ -718,6 +718,39 @@ function ExcelEditor({onBack}){
    const value=window.prompt('Text Box-এর লেখা লিখুন:');if(value===null)return;
    updateCell(selected,value);applyStyleToSelection({textBox:true,whiteSpace:'normal',border:'1px solid #64748b',backgroundColor:'#fff7ed'});notify('নির্বাচিত সেলে Text Box তৈরি হয়েছে');return;
   }
+  if(name==='Get Data'){document.getElementById('excelFileInput')?.click();return}
+  if(name==='From Text/CSV'){
+   const picker=document.createElement('input');picker.type='file';picker.accept='.csv,text/csv';
+   picker.onchange=()=>{const file=picker.files?.[0];if(!file)return;if(!file.name.toLowerCase().endsWith('.csv')){notify('শুধু CSV ফাইল নির্বাচন করুন');return}importWorkbook(file)};
+   picker.click();return;
+  }
+  if(name==='Refresh All'){
+   try{const next={...cells};let count=0;for(const [ref,value] of Object.entries(cells)){if(typeof value==='string'&&value.trim().startsWith('=')){calculateCell(ref,cells);count++}}
+    setCells(next);recordHistory(next);setSheetStore(v=>({...v,[sheet]:{cells:next,cellStyles}}));notify(count+'টি Formula পুনরায় হিসাব করা হয়েছে');return;
+   }catch(error){notify('Refresh ব্যর্থ: '+error.message);return}
+  }
+  if(name==='What-If Analysis'){
+   const formulaCell=(window.prompt('যে Formula সেলের ফলাফল পরীক্ষা করবেন (যেমন C2):','C2')||'').trim().toUpperCase();if(!formulaCell)return;
+   if(!cells[formulaCell]||typeof cells[formulaCell]!=='string'||!cells[formulaCell].startsWith('=')){notify('Formula থাকা সেল লিখুন');return}
+   const inputCell=(window.prompt('যে Input সেলের মান পরিবর্তন করে পরীক্ষা করবেন (যেমন A2):','A2')||'').trim().toUpperCase();if(!cellToPosition(inputCell)){notify('সঠিক Input Cell লিখুন');return}
+   const raw=window.prompt('পরীক্ষার মানগুলো কমা দিয়ে লিখুন (যেমন 10,20,30):','10,20,30');if(raw===null)return;
+   const values=raw.split(',').map(v=>Number(v.trim()));if(!values.length||values.some(v=>!Number.isFinite(v))){notify('সব Scenario মান সংখ্যা হতে হবে');return}
+   const out=cellToPosition(selected),next={...cells};next[positionToCell(out.col,out.row)]='Input: '+inputCell;next[positionToCell(out.col+1,out.row)]='Result: '+formulaCell;
+   values.forEach((value,i)=>{const row=out.row+i+1;next[positionToCell(out.col,row)]=value;try{const result=calculateCell(formulaCell,{...cells,[inputCell]:value});next[positionToCell(out.col+1,row)]=typeof result==='number'?result:String(result)}catch{next[positionToCell(out.col+1,row)]='#ERROR!'}});
+   setCells(next);recordHistory(next);notify('What-If Scenario Table তৈরি হয়েছে');return;
+  }
+  if(name==='Goal Seek'){
+   const formulaCell=(window.prompt('যে Formula সেলের ফলাফল পরিবর্তন করবেন (যেমন C2):','C2')||'').trim().toUpperCase();if(!formulaCell)return;
+   if(typeof cells[formulaCell]!=='string'||!cells[formulaCell].trim().startsWith('=')){notify('Formula থাকা সেল লিখুন');return}
+   const inputCell=(window.prompt('কোন Input Cell পরিবর্তন করবেন (যেমন A2):','A2')||'').trim().toUpperCase();if(!cellToPosition(inputCell)){notify('সঠিক Input Cell লিখুন');return}
+   const target=Number(window.prompt('Formula-র কাঙ্ক্ষিত ফলাফল কত?','100'));if(!Number.isFinite(target)){notify('সঠিক Target Number দিন');return}
+   let x0=Number(cells[inputCell]??0);if(!Number.isFinite(x0))x0=0;let x1=x0===0?1:x0*1.05+0.01,solved=false;
+   const evaluate=x=>{const y=calculateCell(formulaCell,{...cells,[inputCell]:x});const n=Number(y);if(!Number.isFinite(n))throw Error('Formula ফলাফল সংখ্যা নয়');return n-target};
+   try{let y0=evaluate(x0),y1=evaluate(x1);for(let i=0;i<100;i++){if(Math.abs(y1)<1e-8){solved=true;break}const den=y1-y0;if(Math.abs(den)<1e-14)break;let x2=x1-y1*(x1-x0)/den;if(!Number.isFinite(x2))break;x2=Math.max(-1e12,Math.min(1e12,x2));x0=x1;y0=y1;x1=x2;y1=evaluate(x1)}if(!solved&&Math.abs(y1)<1e-6)solved=true;
+    if(!solved){notify('Goal Seek সমাধান পায়নি। অন্য Initial Value বা Target চেষ্টা করুন');return}
+    updateCell(inputCell,x1);notify('Goal Seek সফল: '+inputCell+' = '+Number(x1.toFixed(8)));return;
+   }catch(error){notify('Goal Seek ব্যর্থ: '+error.message);return}
+  }
   if(name==='Data Validation'){
    const mode=window.prompt('Validation type লিখুন: list / whole / decimal / clear','list');if(mode===null)return;
    const b=getSelectionBounds(),next={...dataValidations};
