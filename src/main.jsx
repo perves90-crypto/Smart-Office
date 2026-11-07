@@ -451,11 +451,22 @@ function ExcelEditor({onBack}){
  const applyFilter=()=>{
   const p=cellToPosition(selected)||{row:1,col:1};
   const maxRow=Math.max(1,...Object.keys(cells).map(k=>cellToPosition(k)?.row||1));
-  const term=window.prompt('নির্বাচিত Column-এ কোন মান দেখাবেন? ফাঁকা রাখলে Filter উঠবে:', '');
+  const mode=window.prompt('Filter ধরন লিখুন: contains / equals / starts / ends / blank / nonblank / greater / less / clear','contains');
+  if(mode===null)return;
+  const kind=mode.trim().toLowerCase();
+  if(kind==='clear'){setFilterConfig(null);setFilter(false);notify('Filter পরিষ্কার হয়েছে');return}
+  if(!['contains','equals','starts','ends','blank','nonblank','greater','less'].includes(kind)){notify('সঠিক Filter ধরন লিখুন');return}
+  const term=['blank','nonblank'].includes(kind)?'':window.prompt('Filter মান লিখুন:',kind==='greater'||kind==='less'?'0':'');
   if(term===null)return;
-  if(term===''){setFilterConfig(null);setFilter(false);notify('Filter পরিষ্কার হয়েছে');return}
-  const keep=[];for(let r=p.row+1;r<=maxRow;r++){const v=String(cells[positionToCell(p.col,r)]??'');if(v.toLowerCase().includes(term.toLowerCase()))keep.push(r);}
-  setFilterConfig({rows:keep,range:{start:p.row+1,end:maxRow}});setFilter(true);notify('Filter প্রয়োগ হয়েছে');
+  const target=Number(term),numeric=['greater','less'].includes(kind);
+  if(numeric&&!Number.isFinite(target)){notify('Greater/Less Filter-এর জন্য সংখ্যা দিন');return}
+  const keep=[];
+  for(let r=p.row+1;r<=maxRow;r++){
+   const raw=cells[positionToCell(p.col,r)],value=String(raw??''),lower=value.toLowerCase(),needle=String(term).toLowerCase();
+   const match=kind==='blank'?(raw===undefined||raw===null||value.trim()===''):kind==='nonblank'?(raw!==undefined&&raw!==null&&value.trim()!==''):kind==='equals'?lower===needle:kind==='starts'?lower.startsWith(needle):kind==='ends'?lower.endsWith(needle):kind==='greater'?Number(raw)>target:kind==='less'?Number(raw)<target:lower.includes(needle);
+   if(match)keep.push(r);
+  }
+  setFilterConfig({rows:keep,range:{start:p.row+1,end:maxRow}});setFilter(true);notify('Filter প্রয়োগ হয়েছে: '+keep.length+'টি Row পাওয়া গেছে');
  };
  const toggleStyle=(key)=>updateStyle({[key]:!cellStyles[selected]?.[key]});
  React.useEffect(()=>{
