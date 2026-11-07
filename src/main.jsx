@@ -326,6 +326,8 @@ function ExcelEditor({onBack}){
     let valid=true,message='';
     if(rule.type==='list'){valid=rule.values.includes(raw.trim());message='এই সেলে অনুমোদিত তালিকার একটি মান লিখুন: '+rule.values.join(', ')}
     else if(rule.type==='whole'||rule.type==='decimal'){const n=Number(raw);valid=Number.isFinite(n)&&(rule.type!=='whole'||Number.isInteger(n))&&n>=rule.min&&n<=rule.max;message='মান '+rule.min+' থেকে '+rule.max+(rule.type==='whole'?' এর মধ্যে পূর্ণসংখ্যা':' এর মধ্যে সংখ্যা')+' হতে হবে'}
+    else if(rule.type==='date'){const time=Date.parse(raw),min=Date.parse(rule.min),max=Date.parse(rule.max);valid=Number.isFinite(time)&&time>=min&&time<=max;message='তারিখ '+rule.min+' থেকে '+rule.max+' এর মধ্যে হতে হবে'}
+    else if(rule.type==='textLength'){const length=raw.length;valid=length>=rule.min&&length<=rule.max;message='Text length '+rule.min+' থেকে '+rule.max+' অক্ষরের মধ্যে হতে হবে'}
     if(!valid){notify(message);return}
    }
   }
@@ -969,8 +971,9 @@ function ExcelEditor({onBack}){
    if(mode.toLowerCase()==='clear'){for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++)delete next[positionToCell(c,r)];setDataValidations(next);notify('নির্বাচিত সেলের Validation সরানো হয়েছে');return}
    let rule;
    if(mode.toLowerCase()==='list'){const input=window.prompt('অনুমোদিত মানগুলো কমা দিয়ে লিখুন (যেমন: Yes,No,Pending)');if(input===null)return;const values=input.split(',').map(x=>x.trim()).filter(Boolean);if(!values.length){notify('তালিকা খালি রাখা যাবে না');return}rule={type:'list',values}}
-   else if(mode.toLowerCase()==='whole'||mode.toLowerCase()==='decimal'){const min=Number(window.prompt('সর্বনিম্ন মান','0')),max=Number(window.prompt('সর্বোচ্চ মান','100'));if(!Number.isFinite(min)||!Number.isFinite(max)||min>max){notify('সঠিক সর্বনিম্ন ও সর্বোচ্চ মান দিন');return}rule={type:mode.toLowerCase(),min,max}}
-   else{notify('list, whole, decimal অথবা clear লিখুন');return}
+   else if(mode.toLowerCase()==='whole'||mode.toLowerCase()==='decimal'||mode.toLowerCase()==='textlength'){const min=Number(window.prompt(mode.toLowerCase()==='textlength'?'সর্বনিম্ন অক্ষর সংখ্যা':'সর্বনিম্ন মান','0')),max=Number(window.prompt(mode.toLowerCase()==='textlength'?'সর্বোচ্চ অক্ষর সংখ্যা':'সর্বোচ্চ মান','100'));if(!Number.isInteger(min)||!Number.isInteger(max)||min<0||max<min){notify('সঠিক সর্বনিম্ন ও সর্বোচ্চ মান দিন');return}rule={type:mode.toLowerCase()==='textlength'?'textLength':mode.toLowerCase(),min,max}}
+   else if(mode.toLowerCase()==='date'){const min=window.prompt('শুরুর তারিখ (YYYY-MM-DD)','2026-01-01'),max=window.prompt('শেষ তারিখ (YYYY-MM-DD)','2026-12-31');if(min===null||max===null||!/^\\d{4}-\\d{2}-\\d{2}$/.test(min)||!/^\\d{4}-\\d{2}-\\d{2}$/.test(max)||min>max){notify('সঠিক তারিখের সীমা দিন');return}rule={type:'date',min,max}}
+   else{notify('list, whole, decimal, textLength, date অথবা clear লিখুন');return}
    for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++)next[positionToCell(c,r)]=rule;
    setDataValidations(next);notify('নির্বাচিত সেলে Data Validation চালু হয়েছে');return;
   }
