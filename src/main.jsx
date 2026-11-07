@@ -340,7 +340,10 @@ function ExcelEditor({onBack}){
      imported[name]={cells,cellStyles:{}};
     });
     const activeIndex=workbook.Workbook?.Views?.[0]?.activeTab;
-    applyWorkbook(imported,Number.isInteger(activeIndex)?names[activeIndex]:names[0]);
+    const sheetMeta=workbook.Workbook?.Sheets||[];
+    const firstVisible=names.findIndex((_,index)=>!sheetMeta[index]?.Hidden);
+    const chosenIndex=Number.isInteger(activeIndex)&&names[activeIndex]&&!sheetMeta[activeIndex]?.Hidden?activeIndex:(firstVisible>=0?firstVisible:0);
+    applyWorkbook(imported,names[chosenIndex]);
    }catch(error){notify('ফাইল Open হয়নি: '+(error?.message||'Excel data পড়া যায়নি'))}
    finally{setIsImporting(false)}
   };
