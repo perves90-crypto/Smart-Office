@@ -7,11 +7,11 @@ import './style.css';
 const ribbonData = {
  Home: [
   {group:'Clipboard',items:[['Undo',Undo2],['Redo',Redo2],['Paste',Clipboard],['Cut',Scissors],['Copy',Copy],['Format Painter',Paintbrush]]},
-  {group:'Font',items:[['Font',Type],['Bold',Bold],['Italic',Italic],['Underline',Underline],['Font Color',Type]]},
-  {group:'Alignment',items:[['Align Left',AlignLeft],['Center',AlignCenter],['Align Right',AlignRight],['Wrap Text',WrapText],['Merge Cells',Merge]]},
-  {group:'Number',items:[['Number Format',Calculator],['Currency',Coins],['Percent',Percent],['Date',CalendarDays]]},
-  {group:'Cells',items:[['Insert Rows',Plus],['Insert Columns',Plus],['Delete Rows',X],['Delete Columns',X],['Format',Grid2X2]]},
-  {group:'Editing',items:[['AutoSum',Calculator],['Fill',ChevronDown],['Clear',X],['Find',Search],['Sort & Filter',Filter]]}
+  {group:'Font',items:[['Font Name',Type],['Font Size',Type],['Increase Font Size',Plus],['Decrease Font Size',ChevronDown],['Bold',Bold],['Italic',Italic],['Underline',Underline],['Font Color',Type],['Fill Color',Paintbrush],['Borders',Grid2X2]]},
+  {group:'Alignment',items:[['Align Left',AlignLeft],['Center',AlignCenter],['Align Right',AlignRight],['Top Align',AlignLeft],['Middle Align',AlignCenter],['Bottom Align',AlignRight],['Wrap Text',WrapText],['Merge Cells',Merge],['Unmerge Cells',X],['Increase Indent',ChevronDown],['Decrease Indent',ChevronDown]]},
+  {group:'Number',items:[['General',Calculator],['Number',Calculator],['Currency',Coins],['Accounting',Coins],['Percentage',Percent],['Date',CalendarDays],['Time',Clock3],['Fraction',Calculator],['Scientific',Calculator],['Text',Type],['Increase Decimal',Plus],['Decrease Decimal',ChevronDown]]},
+  {group:'Cells',items:[['Insert Rows',Plus],['Insert Columns',Plus],['Delete Rows',X],['Delete Columns',X],['Row Height',Grid2X2],['Column Width',Grid2X2],['AutoFit Row Height',ChevronDown],['AutoFit Column Width',ChevronDown],['Hide Rows',Eye],['Unhide Rows',Eye],['Hide Columns',Eye],['Unhide Columns',Eye]]},
+  {group:'Editing',items:[['AutoSum',Calculator],['Fill Down',ChevronDown],['Fill Right',ChevronDown],['Clear Contents',X],['Clear Formats',X],['Clear All',X],['Find',Search],['Replace',Search],['Sort A to Z',SortAsc],['Sort Z to A',ArrowDownUp],['Filter',Filter],['Select All',Table2]]}
  ],
  File: [
   {group:'File',items:[['New Workbook',Plus],['Open',FolderOpen],['Save',Save],['Save As',FileSpreadsheet],['Print',Printer],['Export PDF',File]]},
@@ -220,6 +220,12 @@ function ExcelEditor({onBack}){
  const [showFormula,setShowFormula]=React.useState(true);
  const [showGrid,setShowGrid]=React.useState(true);
  const [filter,setFilter]=React.useState(false);
+ const [rowHeights,setRowHeights]=React.useState({});
+ const [columnWidths,setColumnWidths]=React.useState({});
+ const [hiddenRows,setHiddenRows]=React.useState([]);
+ const [hiddenCols,setHiddenCols]=React.useState([]);
+ const [mergedRanges,setMergedRanges]=React.useState([]);
+ const [filterConfig,setFilterConfig]=React.useState(null);
  const colName=n=>{let s='';while(n>0){let r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}return s};
  const notify=t=>{setNotice(t);setTimeout(()=>setNotice(''),1800)};
  const [confirmExit,setConfirmExit]=React.useState(false);
@@ -316,6 +322,60 @@ function ExcelEditor({onBack}){
   const next=remap(cells),styles=remap(cellStyles);setCells(next);setCellStyles(styles);setCellHistory(h=>[...h.slice(0,historyIndex+1),next].slice(-101));setHistoryIndex(i=>Math.min(i+1,100));setFormula(next[selected]||'');notify((remove?'Deleted ':'Inserted ')+(axis==='row'?'row':'column'));
  };
  const updateStyle=(patch)=>setCellStyles(p=>({...p,[selected]:{...(p[selected]||{}),...patch}}));
+ const applyStyleToSelection=(patch)=>{
+  const b=getSelectionBounds(),next={...cellStyles};
+  for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++){const id=positionToCell(c,r);next[id]={...(next[id]||{}),...patch};}
+  setCellStyles(next);notify('নির্বাচিত সেলের ফরম্যাট পরিবর্তন হয়েছে');
+ };
+ const clearSelection=(mode)=>{
+  const b=getSelectionBounds(),nextCells={...cells},nextStyles={...cellStyles};
+  for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++){const id=positionToCell(c,r);if(mode!=='formats')delete nextCells[id];if(mode!=='contents')delete nextStyles[id];}
+  setCells(nextCells);setCellStyles(nextStyles);setFormula(nextCells[selected]??'');notify(mode==='contents'?'নির্বাচিত সেলের লেখা মুছে ফেলা হয়েছে':mode==='formats'?'নির্বাচিত সেলের ফরম্যাট মুছে ফেলা হয়েছে':'নির্বাচিত সেল সম্পূর্ণ পরিষ্কার হয়েছে');
+ };
+ const setFormat=(format)=>{
+  const formats={General:null,Number:'number',Currency:'currency',Accounting:'accounting',Percentage:'percent',Date:'date',Time:'time',Fraction:'fraction',Scientific:'scientific',Text:'text'};
+  const value=formats[format];applyStyleToSelection({numberFormat:value||'general'});
+ };
+ const fillSelection=(axis)=>{
+  const b=getSelectionBounds(),origin=cellToPosition(selected)||{row:b.minRow,col:b.minCol},source=cells[selected]??'';
+  if(axis==='down'){for(let r=origin.row+1;r<=b.maxRow;r++)updateCell(positionToCell(origin.col,r),source);}
+  else {for(let c=origin.col+1;c<=b.maxCol;c++)updateCell(positionToCell(c,origin.row),source);}
+  notify(axis==='down'?'Fill Down সম্পন্ন':'Fill Right সম্পন্ন');
+ };
+ const sortSelection=(direction)=>{
+  const b=getSelectionBounds(),p=cellToPosition(selected)||{row:b.minRow,col:b.minCol};
+  const rows=[];for(let r=b.minRow;r<=b.maxRow;r++){const values=[],styles=[];for(let c=b.minCol;c<=b.maxCol;c++){const id=positionToCell(c,r);values.push(cells[id]??'');styles.push(cellStyles[id]||null);}rows.push({values,styles,original:r});}
+  if(rows.length<2){notify('Sort করার জন্য অন্তত ২টি Row নির্বাচন করুন');return}
+  const header=rows.shift();
+  rows.sort((a,bv)=>String(a.values[p.col-b.minCol]??'').localeCompare(String(bv.values[p.col-b.minCol]??''),'en',{numeric:true,sensitivity:'base'})*(direction==='asc'?1:-1));
+  const next={...cells},nextStyles={...cellStyles};
+  [...rows].forEach((row,index)=>{const target=b.minRow+1+index;row.values.forEach((v,i)=>{const id=positionToCell(b.minCol+i,target);if(v===''||v===undefined)delete next[id];else next[id]=v;const st=row.styles[i];if(st)nextStyles[id]=st;else delete nextStyles[id];});});
+  header.values.forEach((v,i)=>{const id=positionToCell(b.minCol+i,b.minRow);if(v===''||v===undefined)delete next[id];else next[id]=v;});
+  setCells(next);setCellStyles(nextStyles);notify(direction==='asc'?'A to Z Sort সম্পন্ন':'Z to A Sort সম্পন্ন');
+ };
+ const replaceText=()=>{
+  const find=window.prompt('কোন লেখা পরিবর্তন করবেন?');if(find===null||find==='')return;
+  const replacement=window.prompt('নতুন লেখা লিখুন:');if(replacement===null)return;
+  const next={...cells};let count=0;
+  Object.entries(next).forEach(([id,value])=>{if(typeof value==='string'&&!value.startsWith('=')&&value.includes(find)){next[id]=value.split(find).join(replacement);count++;}});
+  setCells(next);notify(count+'টি সেলে Replace সম্পন্ন');
+ };
+ const mergeSelection=(unmerge=false)=>{
+  const b=getSelectionBounds();
+  if(unmerge){setMergedRanges(old=>old.filter(m=>!(m.startRow<=b.maxRow&&m.endRow>=b.minRow&&m.startCol<=b.maxCol&&m.endCol>=b.minCol)));notify('Merge সরানো হয়েছে');return}
+  if(b.minRow===b.maxRow&&b.minCol===b.maxCol){notify('Merge করার জন্য একাধিক সেল নির্বাচন করুন');return}
+  setMergedRanges(old=>[...old,{startRow:b.minRow,endRow:b.maxRow,startCol:b.minCol,endCol:b.maxCol}]);
+  const anchor=positionToCell(b.minCol,b.minRow),next={...cells};for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++){const id=positionToCell(c,r);if(id!==anchor)delete next[id];}
+  setCells(next);notify('নির্বাচিত সেল Merge হয়েছে');
+ };
+ const applyFilter=()=>{
+  const b=getSelectionBounds(),p=cellToPosition(selected)||{row:b.minRow,col:b.minCol};
+  const term=window.prompt('এই কলামে কোন মান দেখাবেন? ফাঁকা রাখলে সব মান দেখাবে:', '');
+  if(term===null)return;
+  if(term===''){setFilterConfig(null);setFilter(false);notify('Filter পরিষ্কার হয়েছে');return}
+  const keep=[];for(let r=b.minRow+1;r<=b.maxRow;r++){const v=String(cells[positionToCell(p.col,r)]??'');if(v.toLowerCase().includes(term.toLowerCase()))keep.push(r);}
+  setFilterConfig({rows:keep,range:{start:b.minRow+1,end:b.maxRow}});setFilter(true);notify('Filter প্রয়োগ হয়েছে');
+ };
  const toggleStyle=(key)=>updateStyle({[key]:!cellStyles[selected]?.[key]});
  React.useEffect(()=>{
   const onKeyDown=e=>{
@@ -506,47 +566,57 @@ function ExcelEditor({onBack}){
   if(name==='Format Painter'){const style=cellStyles[selected]||{};setClipboard({kind:'style',value:'',style});notify('Format copied — select Paste to apply');return}
   if(name==='Save'||name==='Save As'){exportWorkbook('xlsx');return}
   if(name==='Open'){document.getElementById('excelFileInput')?.click();return}
-  if(name==='Export PDF'){notify('PDF export will be added in a later update');return}
-  if(name==='Export PDF'||name==='Print'){notify(name+' option selected');return}
   if(name==='Gridlines'){setShowGrid(v=>!v);return}
   if(name==='Formula Bar'){setShowFormula(v=>!v);return}
-  if(name==='Filter'){setFilter(v=>!v);return}
   if(name==='New Workbook'){setCells({});setCellHistory([{}]);setHistoryIndex(0);setCellStyles({});setSheetStore({'Sheet1':{cells:{},cellStyles:{}}});setSheet('Sheet1');setSelected('A1');setFormula('');notify('New workbook created');return}
-  if(name==='Column Chart'){insertChart('Column');return}
-  if(name==='Line Chart'){insertChart('Line');return}
-  if(name==='Pie Chart'||name==='Recommended Charts'){insertChart(name==='Pie Chart'?'Pie':'Column');return}
-  if(name==='PivotTable'){createPivot();return}
-  if(name==='AutoSum'){const p=cellToPosition(selected);if(p){let start=p.row-1;while(start>1&&cells[positionToCell(p.col,start-1)]!==undefined&&cells[positionToCell(p.col,start-1)]!=='')start--;const end=p.row-1;const ref=end>=start?positionToCell(p.col,start)+':'+positionToCell(p.col,end):positionToCell(p.col,1)+':'+positionToCell(p.col,1);const value='=SUM('+ref+')';setFormula(value);updateCell(selected,value);notify('SUM formula added')}return}
+  if(name==='Bold'){applyStyleToSelection({bold:!cellStyles[selected]?.bold});return}
+  if(name==='Italic'){applyStyleToSelection({italic:!cellStyles[selected]?.italic});return}
+  if(name==='Underline'){applyStyleToSelection({underline:!cellStyles[selected]?.underline});return}
+  if(name==='Font Name'){const font=window.prompt('Font name লিখুন:',cellStyles[selected]?.fontFamily||'Arial');if(font)applyStyleToSelection({fontFamily:font});return}
+  if(name==='Font Size'){const size=Number(window.prompt('Font size (6–72):',cellStyles[selected]?.fontSize||11));if(size>=6&&size<=72)applyStyleToSelection({fontSize:size});else notify('Font size 6 থেকে 72 হতে হবে');return}
+  if(name==='Increase Font Size'||name==='Decrease Font Size'){const old=Number(cellStyles[selected]?.fontSize||11),size=Math.max(6,Math.min(72,old+(name==='Increase Font Size'?1:-1)));applyStyleToSelection({fontSize:size});return}
+  if(name==='Font Color'||name==='Fill Color'){const key=name==='Font Color'?'color':'backgroundColor',color=window.prompt('রং লিখুন (যেমন #ff0000):',cellStyles[selected]?.[key]||(key==='color'?'#202124':'#fff2cc'));if(color)applyStyleToSelection({[key]:color});return}
+  if(name==='Borders'){applyStyleToSelection({border:'1px solid #64748b'});return}
+  if(name==='Align Left'||name==='Center'||name==='Align Right'){applyStyleToSelection({textAlign:name==='Align Left'?'left':name==='Center'?'center':'right'});return}
+  if(name==='Top Align'||name==='Middle Align'||name==='Bottom Align'){applyStyleToSelection({verticalAlign:name==='Top Align'?'top':name==='Middle Align'?'middle':'bottom'});return}
+  if(name==='Wrap Text'){applyStyleToSelection({whiteSpace:cellStyles[selected]?.whiteSpace==='normal'?'nowrap':'normal'});return}
+  if(name==='Merge Cells'){mergeSelection(false);return}
+  if(name==='Unmerge Cells'){mergeSelection(true);return}
+  if(name==='Increase Indent'||name==='Decrease Indent'){const old=Number(cellStyles[selected]?.indent||0),indent=Math.max(0,Math.min(10,old+(name==='Increase Indent'?1:-1)));applyStyleToSelection({indent});return}
+  if(['General','Number','Currency','Accounting','Percentage','Date','Time','Fraction','Scientific','Text'].includes(name)){setFormat(name);return}
+  if(name==='Increase Decimal'||name==='Decrease Decimal'){const old=Number(cellStyles[selected]?.decimalPlaces??2),decimalPlaces=Math.max(0,Math.min(10,old+(name==='Increase Decimal'?1:-1)));applyStyleToSelection({decimalPlaces});return}
   if(name==='Insert Rows'||name==='Delete Rows'||name==='Insert Columns'||name==='Delete Columns'){
-   const p=cellToPosition(selected);if(!p)return;
-   const axis=name.includes('Rows')?'row':'col';const remove=name.startsWith('Delete');const at=axis==='row'?p.row:p.col;
-   if(remove&&at===1){notify('The first row/column cannot be deleted');return;}
-   shiftCells(axis,at,remove);return;
+   const p=cellToPosition(selected);if(!p)return;const axis=name.includes('Rows')?'row':'col',remove=name.startsWith('Delete'),at=axis==='row'?p.row:p.col;
+   if(remove&&at===1){notify('The first row/column cannot be deleted');return;}shiftCells(axis,at,remove);return;
   }
-  if(name==='Clear'){updateCell(selected,'');setFormula('');notify(selected+' সেল ক্লিয়ার হয়েছে');return}
+  if(name==='Row Height'||name==='Column Width'){const p=cellToPosition(selected);if(!p)return;const value=Number(window.prompt(name==='Row Height'?'Row height (px):':'Column width (px):',name==='Row Height'?(rowHeights[p.row]||32):(columnWidths[p.col]||110)));if(!Number.isFinite(value)||value<10||value>500){notify('মান ১০ থেকে ৫০০-এর মধ্যে দিন');return}if(name==='Row Height')setRowHeights(v=>({...v,[p.row]:value}));else setColumnWidths(v=>({...v,[p.col]:value}));return}
+  if(name==='AutoFit Row Height'){setRowHeights(v=>({...v,[cellToPosition(selected)?.row||1]:44}));notify('Row height AutoFit করা হয়েছে');return}
+  if(name==='AutoFit Column Width'){setColumnWidths(v=>({...v,[cellToPosition(selected)?.col||1]:Math.max(90,String(cells[selected]??'').length*9+24)}));notify('Column width AutoFit করা হয়েছে');return}
+  if(name==='Hide Rows'){const b=getSelectionBounds();setHiddenRows(v=>[...new Set([...v,...Array.from({length:b.maxRow-b.minRow+1},(_,i)=>b.minRow+i)])]);return}
+  if(name==='Unhide Rows'){setHiddenRows([]);notify('সব লুকানো Row দেখানো হয়েছে');return}
+  if(name==='Hide Columns'){const b=getSelectionBounds();setHiddenCols(v=>[...new Set([...v,...Array.from({length:b.maxCol-b.minCol+1},(_,i)=>b.minCol+i)])]);return}
+  if(name==='Unhide Columns'){setHiddenCols([]);notify('সব লুকানো Column দেখানো হয়েছে');return}
+  if(name==='AutoSum'){const p=cellToPosition(selected);if(p){let start=p.row-1;while(start>1&&cells[positionToCell(p.col,start-1)]!==undefined&&cells[positionToCell(p.col,start-1)]!=='')start--;const end=p.row-1;const ref=end>=start?positionToCell(p.col,start)+':'+positionToCell(p.col,end):positionToCell(p.col,1)+':'+positionToCell(p.col,1);const value='=SUM('+ref+')';setFormula(value);updateCell(selected,value);notify('SUM formula added')}return}
+  if(name==='Fill Down'||name==='Fill Right'){fillSelection(name==='Fill Down'?'down':'right');return}
+  if(name==='Clear Contents'){clearSelection('contents');return}
+  if(name==='Clear Formats'){clearSelection('formats');return}
+  if(name==='Clear All'){clearSelection('all');return}
   if(name==='Find'){const term=window.prompt('কোন লেখা/সংখ্যা খুঁজবেন?');if(term!==null&&term!==''){const found=Object.entries(cells).find(([,v])=>String(v).toLowerCase().includes(term.toLowerCase()));if(found){selectCell(found[0]);notify(found[0]+' পাওয়া গেছে')}else notify('কোনো মিল পাওয়া যায়নি')}return}
-  if(name==='Bold'){toggleStyle('bold');return}
-  if(name==='Italic'){toggleStyle('italic');return}
-  if(name==='Underline'){toggleStyle('underline');return}
-  if(name==='Align Left'){updateStyle({textAlign:'left'});return}
-  if(name==='Center'){updateStyle({textAlign:'center'});return}
-  if(name==='Align Right'){updateStyle({textAlign:'right'});return}
-  if(name==='Font Color'){const color=window.prompt('Enter font color (example: #ff0000):',cellStyles[selected]?.color||'#202124');if(color)updateStyle({color});return}
-  if(name==='Fill'){const color=window.prompt('Enter cell fill color (example: #fff2cc):',cellStyles[selected]?.backgroundColor||'#fff2cc');if(color)updateStyle({backgroundColor:color});return}
-  if(name==='Currency'){updateStyle({numberFormat:'currency'});return}
-  if(name==='Percent'){updateStyle({numberFormat:'percent'});return}
-  if(name==='Date'){updateStyle({numberFormat:'date'});return}
+  if(name==='Replace'){replaceText();return}
+  if(name==='Sort A to Z'||name==='Sort Z to A'){sortSelection(name==='Sort A to Z'?'asc':'desc');return}
+  if(name==='Filter'){applyFilter();return}
+  if(name==='Select All'){setSelectionBand({axis:'all'});setSelected('A1');setFormula(cells.A1||'');notify('সম্পূর্ণ Sheet সিলেক্ট হয়েছে');return}
   notify(name+' selected');
  };
  const usedMaxRow=Object.keys(cells).reduce((m,key)=>Math.max(m,cellToPosition(key)?.row||0),0);
  const usedMaxCol=Object.keys(cells).reduce((m,key)=>Math.max(m,cellToPosition(key)?.col||0),0);
- const rows=Array.from({length:visibleRows},(_,i)=>i+1),cols=Array.from({length:visibleCols},(_,i)=>i+1);
+ const rows=Array.from({length:visibleRows},(_,i)=>i+1).filter(r=>!hiddenRows.includes(r)&&(!filterConfig||r<filterConfig.range.start||r>filterConfig.range.end||filterConfig.rows.includes(r))),cols=Array.from({length:visibleCols},(_,i)=>i+1).filter(c=>!hiddenCols.includes(c));
  return <div className="excelApp">
   <header className="excelTop"><button className="backBtn" onClick={requestExit} aria-label="Back">‹</button><div className="excelTitle"><b><Table2 size={19}/> Smart Excel</b><small>Workbook • {sheet}</small></div><button className="topIcon" onClick={()=>action('Save')}><Save size={19}/></button><button className="topIcon" onClick={()=>notify('More workbook options')}><Settings size={19}/></button></header>
   <div className="workbookBar"><span className="fileBadge"><FileSpreadsheet size={16}/></span><input aria-label="Workbook name" value={workbookName} onChange={e=>setWorkbookName(e.target.value)} /><span className="savedState">● Saved locally</span></div>
   <div className="ribbonStrip">{ribbonData[active].map(group=><div className="ribbonGroup" key={group.group}><div className="ribbonButtons">{group.items.map(([label,Icon])=><button key={label} className="ribbonAction" onClick={()=>action(label)} title={label}><Icon size={17}/><span>{label}</span></button>)}</div><small>{group.group}</small></div>)}</div>
   {showFormula&&<div className="formulaBar"><span className="cellRef">{selected}</span><span className="fx">fx</span><input value={formula} onChange={e=>{setFormula(e.target.value);updateCell(selected,e.target.value)}} placeholder="Enter value or formula"/></div>}
-  <div className="sheetScroll" style={{touchAction:'none'}} onPaste={e=>{const raw=e.clipboardData?.getData('text/plain');if(raw!==undefined&&raw!==''){e.preventDefault();pasteMatrix(raw.replace(/\r/g,'').replace(/\n$/,'').split('\n').map(line=>line.split('\t')))}}} onPointerDown={e=>{const box=e.currentTarget;touchPoints.current.set(e.pointerId,{x:e.clientX,y:e.clientY});try{box.setPointerCapture(e.pointerId)}catch{};if(touchPoints.current.size>=2){setIsSelectingRange(false);const pts=[...touchPoints.current.values()].slice(0,2),dx=pts[0].x-pts[1].x,dy=pts[0].y-pts[1].y;touchGesture.current={mode:'pinch',distance:Math.max(1,Math.hypot(dx,dy)),zoom:sheetZoom,midX:(pts[0].x+pts[1].x)/2,midY:(pts[0].y+pts[1].y)/2,scrollLeft:box.scrollLeft,scrollTop:box.scrollTop};return;}if(pivotWizard?.step==='range'){const td=e.target.closest('td[data-cell]');if(!td)return;e.preventDefault();const id=td.dataset.cell;setIsSelectingRange(true);setRangeStart(id);setRangeEnd(id);touchGesture.current={mode:'select'};}else{touchGesture.current={mode:'pan',x:e.clientX,y:e.clientY,scrollLeft:box.scrollLeft,scrollTop:box.scrollTop};}}} onPointerMove={e=>{if(!touchPoints.current.has(e.pointerId))return;touchPoints.current.set(e.pointerId,{x:e.clientX,y:e.clientY});const box=e.currentTarget;if(touchPoints.current.size>=2){const pts=[...touchPoints.current.values()].slice(0,2),g=touchGesture.current;if(!g||g.mode!=='pinch')return;const dx=pts[0].x-pts[1].x,dy=pts[0].y-pts[1].y,dist=Math.max(1,Math.hypot(dx,dy)),midX=(pts[0].x+pts[1].x)/2,midY=(pts[0].y+pts[1].y)/2;setSheetZoom(Math.max(.6,Math.min(2.5,g.zoom*dist/g.distance)));box.scrollLeft=g.scrollLeft-(midX-g.midX);box.scrollTop=g.scrollTop-(midY-g.midY);return;}const g=touchGesture.current;if(g?.mode==='select'){const rect=box.getBoundingClientRect(),edge=42,step=26;if(e.clientX>rect.right-edge)box.scrollLeft+=step;else if(e.clientX<rect.left+edge)box.scrollLeft-=step;if(e.clientY>rect.bottom-edge)box.scrollTop+=step;else if(e.clientY<rect.top+edge)box.scrollTop-=step;const px=Math.max(rect.left+2,Math.min(rect.right-2,e.clientX)),py=Math.max(rect.top+2,Math.min(rect.bottom-2,e.clientY));const el=document.elementFromPoint(px,py),td=el?.closest?.('td[data-cell]');if(td)setRangeEnd(td.dataset.cell);}else if(g?.mode==='pan'){box.scrollLeft=g.scrollLeft-(e.clientX-g.x);box.scrollTop=g.scrollTop-(e.clientY-g.y);}}} onPointerUp={e=>{touchPoints.current.delete(e.pointerId);if(touchPoints.current.size===0){touchGesture.current=null;setIsSelectingRange(false);}else if(touchPoints.current.size===1){const p=[...touchPoints.current.values()][0];touchGesture.current={mode:'pan',x:p.x,y:p.y,scrollLeft:e.currentTarget.scrollLeft,scrollTop:e.currentTarget.scrollTop};}}} onPointerCancel={e=>{touchPoints.current.delete(e.pointerId);touchGesture.current=null;setIsSelectingRange(false)}} onScroll={e=>{const el=e.currentTarget;if(el.scrollTop+el.clientHeight>=el.scrollHeight-180)setVisibleRows(v=>v+100);if(el.scrollLeft+el.clientWidth>=el.scrollWidth-180)setVisibleCols(v=>v+10)}}><table style={{zoom:sheetZoom}} className={showGrid?'sheetGrid':'sheetGrid noGrid'}><thead><tr><th className="corner" title="Select All — সম্পূর্ণ Sheet নির্বাচন" aria-label="Select All" onClick={()=>{setSelectionBand({axis:'all'});setSelected('A1');setFormula(cells.A1||'');notify('সম্পূর্ণ Sheet সিলেক্ট হয়েছে')}}>☷</th>{cols.map(c=><th key={c} onClick={()=>selectWholeColumn(c)} className={selectionBand?.axis==='col'&&selectionBand.index===c?'axisSelected':''}>{colName(c)}</th>)}</tr></thead><tbody>{rows.map(r=><tr key={r}><th onClick={()=>selectWholeRow(r)} className={selectionBand?.axis==='row'&&selectionBand.index===r?'axisSelected':''}>{r}</th>{cols.map(c=>{const id=colName(c)+r;const style=cellStyles[id]||{};let display=cells[id]===undefined?'':String(calculateCell(id,cells));if(style.numberFormat==='currency'&&display!==''&&Number.isFinite(Number(display)))display='৳ '+Number(display).toFixed(2);if(style.numberFormat==='percent'&&display!==''&&Number.isFinite(Number(display)))display=(Number(display)*100).toFixed(2)+'%';return <td key={id} data-cell={id} onClick={()=>{if(pivotWizard?.step==='range')return;const now=Date.now(),last=cellTap.current;if(last.id===id&&now-last.time<450){selectCell(id);setEditingCell(id);cellTap.current={id:null,time:0};setTimeout(()=>{const el=document.querySelector('input[aria-label="'+id+'"]');el?.focus();el?.select();},0);}else{selectCell(id);setEditingCell(null);cellTap.current={id,time:now};}}} className={(selected===id?'selectedCell ':'')+((selectionBand?.axis==='col'&&selectionBand.index===c)||(selectionBand?.axis==='row'&&selectionBand.index===r)||selectionBand?.axis==='all'?'bandSelected ':'')+(pivotWizard?.step==='range'&&rangeStart&&rangeEnd&&(()=>{const p=cellToPosition(id),a=cellToPosition(rangeStart),b=cellToPosition(rangeEnd);return p&&a&&b&&p.row>=Math.min(a.row,b.row)&&p.row<=Math.max(a.row,b.row)&&p.col>=Math.min(a.col,b.col)&&p.col<=Math.max(a.col,b.col)})()?'rangeSelected':'')}><input style={{fontWeight:style.bold?'700':'400',fontStyle:style.italic?'italic':'normal',textDecoration:style.underline?'underline':'none',textAlign:style.textAlign||'left',color:style.color||'inherit',backgroundColor:style.backgroundColor||'transparent'}} readOnly={editingCell!==id} aria-label={id} value={editingCell===id?(cells[id]||''):display} onFocus={()=>{if(editingCell===id)selectCell(id)}} onBlur={()=>setEditingCell(null)} onChange={e=>{updateCell(id,e.target.value);if(selected===id)setFormula(e.target.value)}}/></td>})}</tr>)}</tbody></table></div>
+  <div className="sheetScroll" style={{touchAction:'none'}} onPaste={e=>{const raw=e.clipboardData?.getData('text/plain');if(raw!==undefined&&raw!==''){e.preventDefault();pasteMatrix(raw.replace(/\r/g,'').replace(/\n$/,'').split('\n').map(line=>line.split('\t')))}}} onPointerDown={e=>{const box=e.currentTarget;touchPoints.current.set(e.pointerId,{x:e.clientX,y:e.clientY});try{box.setPointerCapture(e.pointerId)}catch{};if(touchPoints.current.size>=2){setIsSelectingRange(false);const pts=[...touchPoints.current.values()].slice(0,2),dx=pts[0].x-pts[1].x,dy=pts[0].y-pts[1].y;touchGesture.current={mode:'pinch',distance:Math.max(1,Math.hypot(dx,dy)),zoom:sheetZoom,midX:(pts[0].x+pts[1].x)/2,midY:(pts[0].y+pts[1].y)/2,scrollLeft:box.scrollLeft,scrollTop:box.scrollTop};return;}if(pivotWizard?.step==='range'){const td=e.target.closest('td[data-cell]');if(!td)return;e.preventDefault();const id=td.dataset.cell;setIsSelectingRange(true);setRangeStart(id);setRangeEnd(id);touchGesture.current={mode:'select'};}else{touchGesture.current={mode:'pan',x:e.clientX,y:e.clientY,scrollLeft:box.scrollLeft,scrollTop:box.scrollTop};}}} onPointerMove={e=>{if(!touchPoints.current.has(e.pointerId))return;touchPoints.current.set(e.pointerId,{x:e.clientX,y:e.clientY});const box=e.currentTarget;if(touchPoints.current.size>=2){const pts=[...touchPoints.current.values()].slice(0,2),g=touchGesture.current;if(!g||g.mode!=='pinch')return;const dx=pts[0].x-pts[1].x,dy=pts[0].y-pts[1].y,dist=Math.max(1,Math.hypot(dx,dy)),midX=(pts[0].x+pts[1].x)/2,midY=(pts[0].y+pts[1].y)/2;setSheetZoom(Math.max(.6,Math.min(2.5,g.zoom*dist/g.distance)));box.scrollLeft=g.scrollLeft-(midX-g.midX);box.scrollTop=g.scrollTop-(midY-g.midY);return;}const g=touchGesture.current;if(g?.mode==='select'){const rect=box.getBoundingClientRect(),edge=42,step=26;if(e.clientX>rect.right-edge)box.scrollLeft+=step;else if(e.clientX<rect.left+edge)box.scrollLeft-=step;if(e.clientY>rect.bottom-edge)box.scrollTop+=step;else if(e.clientY<rect.top+edge)box.scrollTop-=step;const px=Math.max(rect.left+2,Math.min(rect.right-2,e.clientX)),py=Math.max(rect.top+2,Math.min(rect.bottom-2,e.clientY));const el=document.elementFromPoint(px,py),td=el?.closest?.('td[data-cell]');if(td)setRangeEnd(td.dataset.cell);}else if(g?.mode==='pan'){box.scrollLeft=g.scrollLeft-(e.clientX-g.x);box.scrollTop=g.scrollTop-(e.clientY-g.y);}}} onPointerUp={e=>{touchPoints.current.delete(e.pointerId);if(touchPoints.current.size===0){touchGesture.current=null;setIsSelectingRange(false);}else if(touchPoints.current.size===1){const p=[...touchPoints.current.values()][0];touchGesture.current={mode:'pan',x:p.x,y:p.y,scrollLeft:e.currentTarget.scrollLeft,scrollTop:e.currentTarget.scrollTop};}}} onPointerCancel={e=>{touchPoints.current.delete(e.pointerId);touchGesture.current=null;setIsSelectingRange(false)}} onScroll={e=>{const el=e.currentTarget;if(el.scrollTop+el.clientHeight>=el.scrollHeight-180)setVisibleRows(v=>v+100);if(el.scrollLeft+el.clientWidth>=el.scrollWidth-180)setVisibleCols(v=>v+10)}}><table style={{zoom:sheetZoom}} className={showGrid?'sheetGrid':'sheetGrid noGrid'}><thead><tr><th className="corner" title="Select All — সম্পূর্ণ Sheet নির্বাচন" aria-label="Select All" onClick={()=>{setSelectionBand({axis:'all'});setSelected('A1');setFormula(cells.A1||'');notify('সম্পূর্ণ Sheet সিলেক্ট হয়েছে')}}>☷</th>{cols.map(c=><th key={c} style={{minWidth:columnWidths[c]||110,width:columnWidths[c]||110}} onClick={()=>selectWholeColumn(c)} className={selectionBand?.axis==='col'&&selectionBand.index===c?'axisSelected':''}>{colName(c)}</th>)}</tr></thead><tbody>{rows.map(r=><tr key={r} style={{height:rowHeights[r]||32}}><th onClick={()=>selectWholeRow(r)} className={selectionBand?.axis==='row'&&selectionBand.index===r?'axisSelected':''}>{r}</th>{cols.map(c=>{const id=colName(c)+r;const style=cellStyles[id]||{};let display=cells[id]===undefined?'':String(calculateCell(id,cells));if(style.numberFormat==='currency'&&display!==''&&Number.isFinite(Number(display)))display='৳ '+Number(display).toFixed(2);if(style.numberFormat==='percent'&&display!==''&&Number.isFinite(Number(display)))display=(Number(display)*100).toFixed(2)+'%';return <td key={id} data-cell={id} style={{border:style.border||undefined,minWidth:columnWidths[c]||110,width:columnWidths[c]||110}} onClick={()=>{if(pivotWizard?.step==='range')return;const now=Date.now(),last=cellTap.current;if(last.id===id&&now-last.time<450){selectCell(id);setEditingCell(id);cellTap.current={id:null,time:0};setTimeout(()=>{const el=document.querySelector('input[aria-label="'+id+'"]');el?.focus();el?.select();},0);}else{selectCell(id);setEditingCell(null);cellTap.current={id,time:now};}}} className={(selected===id?'selectedCell ':'')+((selectionBand?.axis==='col'&&selectionBand.index===c)||(selectionBand?.axis==='row'&&selectionBand.index===r)||selectionBand?.axis==='all'?'bandSelected ':'')+(pivotWizard?.step==='range'&&rangeStart&&rangeEnd&&(()=>{const p=cellToPosition(id),a=cellToPosition(rangeStart),b=cellToPosition(rangeEnd);return p&&a&&b&&p.row>=Math.min(a.row,b.row)&&p.row<=Math.max(a.row,b.row)&&p.col>=Math.min(a.col,b.col)&&p.col<=Math.max(a.col,b.col)})()?'rangeSelected':'')}><input style={{fontWeight:style.bold?'700':'400',fontStyle:style.italic?'italic':'normal',textDecoration:style.underline?'underline':'none',textAlign:style.textAlign||'left',verticalAlign:style.verticalAlign||'middle',fontFamily:style.fontFamily||'inherit',fontSize:style.fontSize?style.fontSize+'px':undefined,paddingLeft:style.indent?(6+style.indent*8)+'px':undefined,whiteSpace:style.whiteSpace||'nowrap',color:style.color||'inherit',backgroundColor:style.backgroundColor||'transparent',border:style.border||undefined}} readOnly={editingCell!==id} aria-label={id} value={editingCell===id?(cells[id]||''):display} onFocus={()=>{if(editingCell===id)selectCell(id)}} onBlur={()=>setEditingCell(null)} onChange={e=>{updateCell(id,e.target.value);if(selected===id)setFormula(e.target.value)}}/></td>})}</tr>)}</tbody></table></div>
 
   {pivotWizard&&<section className="pivotWizard"><div className="excelPanelHead"><b>PivotTable তৈরি করুন</b><button onClick={()=>setPivotWizard(null)}>×</button></div>{pivotWizard.step==='range'?<><p>Sheet-এর সব লেখা থাকা সেল স্বয়ংক্রিয়ভাবে সিলেক্ট করা হয়েছে। প্রয়োজনে রেঞ্জটি দেখে Next চাপুন।</p><b>নির্বাচিত রেঞ্জ: {rangeStart&&rangeEnd?(()=>{const a=cellToPosition(rangeStart),b=cellToPosition(rangeEnd);return positionToCell(Math.min(a.col,b.col),Math.min(a.row,b.row))+':'+positionToCell(Math.max(a.col,b.col),Math.max(a.row,b.row))})():'এখনো সিলেক্ট হয়নি'}</b><button className="pivotNext" onClick={pivotNext}>Next</button></>:<><p>নিচের Field-গুলো Rows ও Columns-এর ১০টি করে ঘরে টেনে রাখুন। যতগুলো ঘরে Field দেবেন, রিপোর্টে ততগুলো স্তর ব্যবহার হবে।</p><div className="pivotFields">{pivotWizard.headers.map(h=><div draggable onDragStart={e=>e.dataTransfer.setData('text/plain',h)} onClick={()=>notify('Field-টি Rows বা Columns-এর ঘরে টেনে দিন')} className="pivotField" key={h}>{h}</div>)}</div><div className="pivotMeasureBox"><b>Values / হিসাবের Field</b><select value={pivotWizard.valueField} onChange={e=>setPivotWizard(p=>({...p,valueField:e.target.value}))}><option value="">Field নির্বাচন করুন</option>{pivotWizard.headers.map(h=><option key={h} value={h}>{h}</option>)}</select><b>হিসাবের ধরন</b><select value={pivotWizard.aggregation} onChange={e=>setPivotWizard(p=>({...p,aggregation:e.target.value}))}><option value="count">Count — কয়টি রেকর্ড</option><option value="sum">Sum — মোট যোগফল</option><option value="average">Average — গড়</option></select><small>Count হলে Values Field লাগবে না। Sum/Average হলে সংখ্যার কলাম নির্বাচন করুন।</small></div><div className="pivotDropZones pivotTenZones">{['rowFields','columnFields'].map((zone,zi)=><div className="pivotZone" key={zone}><b>{zi===0?'Rows':'Columns'}</b>{pivotWizard[zone].map((field,index)=><div className="pivotSlot" key={index} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const h=e.dataTransfer.getData('text/plain');setPivotWizard(p=>({...p,[zone]:p[zone].map((v,i)=>i===index?h:v)}))}}><small>{index+1}</small><span>{field||'Field এখানে দিন'}</span><button onClick={()=>setPivotWizard(p=>({...p,[zone]:p[zone].map((v,i)=>i===index?'':v)}))}>×</button></div>)}</div>)}</div><button className="pivotNext" onClick={pivotNext}>Next — PivotTable রিপোর্ট তৈরি করুন</button></>}</section>}
    {chart&&<section className="excelDataPanel"><div className="excelPanelHead"><b>{chart.title}</b><button onClick={()=>setChart(null)}>×</button></div><div className="excelChart"><svg viewBox="0 0 340 190" role="img" aria-label={chart.type+' chart'}><line x1="28" y1="155" x2="330" y2="155" stroke="currentColor" opacity=".45"/>{chart.type==='Line'?chart.series.map((series,si)=>{const max=Math.max(1,...series.values.map(Math.abs));const points=series.values.map((v,i)=>(35+i*(285/Math.max(1,series.values.length-1))+','+(150-v/max*115)).join(' ')).join(' ');return <g key={si}><polyline points={points} fill="none" stroke={['#2563eb','#16a34a','#dc7a20'][si%3]} strokeWidth="3"/>{series.values.map((v,i)=><circle key={i} cx={35+i*(285/Math.max(1,series.values.length-1))} cy={150-v/max*115} r="3.5" fill={['#2563eb','#16a34a','#dc7a20'][si%3]}/>)}</g>}):chart.series.flatMap((series,si)=>series.values.map((v,i)=>{const max=Math.max(1,...chart.series.flatMap(x=>x.values).map(Math.abs));const group=285/Math.max(1,chart.labels.length);const width=Math.max(5,Math.min(28,group/(chart.series.length+1)));const height=Math.abs(v)/max*112;return <rect key={si+'-'+i} x={35+i*group+si*width} y={150-height} width={width-3} height={height} rx="2" fill={['#2563eb','#16a34a','#dc7a20'][si%3]}/>;}))}{chart.labels.map((label,i)=><text key={i} x={35+i*(285/Math.max(1,chart.labels.length))} y="174" fontSize="9" fill="currentColor">{String(label).slice(0,8)}</text>)}</svg></div><small>Source: {chart.range}</small></section>}
