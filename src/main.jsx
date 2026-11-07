@@ -387,14 +387,14 @@ function ExcelEditor({onBack}){
   const next={...cells},nextStyles={...cellStyles};
   [...rows].forEach((row,index)=>{const target=b.minRow+1+index;row.values.forEach((v,i)=>{const id=positionToCell(b.minCol+i,target);if(v===''||v===undefined)delete next[id];else next[id]=v;const st=row.styles[i];if(st)nextStyles[id]=st;else delete nextStyles[id];});});
   header.values.forEach((v,i)=>{const id=positionToCell(b.minCol+i,b.minRow);if(v===''||v===undefined)delete next[id];else next[id]=v;});
-  setCells(next);setCellStyles(nextStyles);notify(direction==='asc'?'A to Z Sort সম্পন্ন':'Z to A Sort সম্পন্ন');
+  setCells(next);setCellStyles(nextStyles);recordHistory(next,nextStyles);notify(direction==='asc'?'A to Z Sort সম্পন্ন':'Z to A Sort সম্পন্ন');
  };
  const replaceText=()=>{
   const find=window.prompt('কোন লেখা পরিবর্তন করবেন?');if(find===null||find==='')return;
   const replacement=window.prompt('নতুন লেখা লিখুন:');if(replacement===null)return;
   const next={...cells};let count=0;
   Object.entries(next).forEach(([id,value])=>{if(typeof value==='string'&&!value.startsWith('=')&&value.includes(find)){next[id]=value.split(find).join(replacement);count++;}});
-  setCells(next);notify(count+'টি সেলে Replace সম্পন্ন');
+  setCells(next);recordHistory(next);notify(count+'টি সেলে Replace সম্পন্ন');
  };
  const mergeSelection=(unmerge=false)=>{
   const b=getSelectionBounds();
@@ -508,7 +508,7 @@ function ExcelEditor({onBack}){
   const addSheet=()=>{let n=Object.keys(sheetStore).length+1,name='Sheet'+n;while(sheetStore[name]){n++;name='Sheet'+n;}setSheetStore(p=>({...p,[sheet]:{cells,cellStyles},[name]:{cells:{},cellStyles:{}}}));setCells({});setCellStyles({});setCellHistory([{}]);setStyleHistory([{}]);setHistoryIndex(0);setSheet(name);setSelected('A1');setFormula('');notify('New sheet created');};
  const switchSheet=(name)=>{if(name===sheet)return;const all={...sheetStore,[sheet]:{cells,cellStyles}};const next=all[name]||{cells:{},cellStyles:{}};setSheetStore(all);setCells(next.cells);setCellStyles(next.cellStyles);setCellHistory([next.cells]);setStyleHistory([next.cellStyles||{}]);setHistoryIndex(0);setSheet(name);setSelected('A1');setFormula(next.cells.A1||'');};
  const renameSheet=()=>{const name=window.prompt('Enter new sheet name:',sheet);if(!name||name===sheet)return;if(name.length>31||/[\\\\/?*\\[\\]:]/.test(name)){notify('Sheet name is invalid (max 31 characters)');return}if(sheetStore[name]){notify('That sheet name already exists');return}const all={...sheetStore,[sheet]:{cells,cellStyles}};all[name]=all[sheet];delete all[sheet];setSheetStore(all);setSheet(name);notify('Sheet renamed');};
- const deleteSheet=()=>{const names=Object.keys({...sheetStore,[sheet]:{cells,cellStyles}});if(names.length<=1){notify('At least one sheet is required');return}if(!window.confirm('Delete sheet '+sheet+'?'))return;const all={...sheetStore,[sheet]:{cells,cellStyles}};delete all[sheet];const nextName=Object.keys(all)[0],next=all[nextName];setSheetStore(all);setSheet(nextName);setCells(next.cells);setCellStyles(next.cellStyles);setCellHistory([next.cells]);setHistoryIndex(0);setSelected('A1');setFormula(next.cells.A1||'');notify('Sheet deleted');};
+ const deleteSheet=()=>{const names=Object.keys({...sheetStore,[sheet]:{cells,cellStyles}});if(names.length<=1){notify('At least one sheet is required');return}if(!window.confirm('Delete sheet '+sheet+'?'))return;const all={...sheetStore,[sheet]:{cells,cellStyles}};delete all[sheet];const nextName=Object.keys(all)[0],next=all[nextName];setSheetStore(all);setSheet(nextName);setCells(next.cells);setCellStyles(next.cellStyles);setCellHistory([next.cells]);setStyleHistory([next.cellStyles||{}]);setHistoryIndex(0);setSelected('A1');setFormula(next.cells.A1||'');notify('Sheet deleted');};
 
  const readRange=(rangeText)=>{
   const parts=String(rangeText||'').toUpperCase().split(':');
