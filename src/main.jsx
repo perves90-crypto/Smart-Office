@@ -258,7 +258,8 @@ function ExcelEditor({onBack}){
  const [columnWidths,setColumnWidths]=React.useState({});
  const [hiddenRows,setHiddenRows]=React.useState([]);
  const [hiddenCols,setHiddenCols]=React.useState([]);
- const [mergedRanges,setMergedRanges]=React.useState([]);
+ const [mergedRanges,setMergedRanges]=React.useState(()=>initialWorkbook?.mergedRanges||[]);
+ const [mergedHistory,setMergedHistory]=React.useState(()=>[initialWorkbook?.mergedRanges||[]]);
  const [filterConfig,setFilterConfig]=React.useState(null);
  const colName=n=>{let s='';while(n>0){let r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}return s};
  const notify=t=>{setNotice(t);setTimeout(()=>setNotice(''),1800)};
@@ -283,16 +284,17 @@ function ExcelEditor({onBack}){
  const selectCell=(id)=>{setSelected(id);setFormula(cells[id]??'');setSelectionBand(null)};
  const selectWholeColumn=(col)=>{const id=positionToCell(col,1);setSelected(id);setFormula(cells[id]??'');setSelectionBand({axis:'col',index:col});notify(colName(col)+' কলাম সম্পূর্ণ সিলেক্ট হয়েছে');};
  const selectWholeRow=(row)=>{const id=positionToCell(1,row);setSelected(id);setFormula(cells[id]??'');setSelectionBand({axis:'row',index:row});notify(row+' নম্বর Row সম্পূর্ণ সিলেক্ট হয়েছে');};
- const recordHistory=(nextCells,nextStyles=cellStyles)=>{
+ const recordHistory=(nextCells,nextStyles=cellStyles,nextMerged=mergedRanges)=>{
   setCellHistory(h=>[...h.slice(0,historyIndex+1),nextCells].slice(-101));
   setStyleHistory(h=>[...h.slice(0,historyIndex+1),nextStyles].slice(-101));
+  setMergedHistory(h=>[...h.slice(0,historyIndex+1),nextMerged].slice(-101));
   setHistoryIndex(i=>Math.min(i+1,100));
  };
  const updateCell=(id,value)=>{
   const next={...cells,[id]:value};
   setCells(next);recordHistory(next);
  };
- const undo=()=>{if(historyIndex<=0){notify('Nothing to undo');return}const i=historyIndex-1;setHistoryIndex(i);setCells(cellHistory[i]||{});setCellStyles(styleHistory[i]||{});setFormula((cellHistory[i]||{})[selected]??'');notify('Undo complete')};
+ const undo=()=>{if(historyIndex<=0){notify('Nothing to undo');return}const i=historyIndex-1;setHistoryIndex(i);setCells(cellHistory[i]||{});setCellStyles(styleHistory[i]||{});setMergedRanges(mergedHistory[i]||[]);setFormula((cellHistory[i]||{})[selected]??'');notify('Undo complete')};
  const redo=()=>{if(historyIndex>=cellHistory.length-1){notify('Nothing to redo');return}const i=historyIndex+1;setHistoryIndex(i);setCells(cellHistory[i]||{});setCellStyles(styleHistory[i]||{});setFormula((cellHistory[i]||{})[selected]??'');notify('Redo complete')};
  const getSelectionBounds=()=>{
   const p=cellToPosition(selected)||{row:1,col:1};
@@ -398,11 +400,18 @@ function ExcelEditor({onBack}){
  };
  const mergeSelection=(unmerge=false)=>{
   const b=getSelectionBounds();
-  if(unmerge){setMergedRanges(old=>old.filter(m=>!(m.startRow<=b.maxRow&&m.endRow>=b.minRow&&m.startCol<=b.maxCol&&m.endCol>=b.minCol)));notify('Merge সরানো হয়েছে');return}
+  if(unmerge){
+   const nextMerged=mergedRanges.filter(m=>!(m.startRow<=b.maxRow&&m.endRow>=b.minRow&&m.startCol<=b.maxCol&&m.endCol>=b.minCol));
+   if(nextMerged.length===mergedRanges.length){notify('এই Selection-এ Merge পাওয়া যায়নি');return}
+   setMergedRanges(nextMerged);recordHistory(cells,cellStyles,nextMerged);notify('Merge সরানো হয়েছে');return;
+  }
   if(b.minRow===b.maxRow&&b.minCol===b.maxCol){notify('Merge করার জন্য একাধিক সেল নির্বাচন করুন');return}
-  setMergedRanges(old=>[...old,{startRow:b.minRow,endRow:b.maxRow,startCol:b.minCol,endCol:b.maxCol}]);
-  const anchor=positionToCell(b.minCol,b.minRow),next={...cells};for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++){const id=positionToCell(c,r);if(id!==anchor)delete next[id];}
-  setCells(next);notify('নির্বাচিত সেল Merge হয়েছে');
+  const overlaps=mergedRanges.some(m=>m.startRow<=b.maxRow&&m.endRow>=b.minRow&&m.startCol<=b.maxCol&&m.endCol>=b.minCol);
+  if(overlaps){notify('নির্বাচিত অংশে আগে থেকেই Merge আছে');return}
+  const nextMerged=[...mergedRanges,{startRow:b.minRow,endRow:b.maxRow,startCol:b.minCol,endCol:b.maxCol}];
+  const anchor=positionToCell(b.minCol,b.minRow),next={...cells};
+  for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++){const id=positionToCell(c,r);if(id!==anchor)delete next[id];}
+  setCells(next);setMergedRanges(nextMerged);recordHistory(next,cellStyles,nextMerged);notify('নির্বাচিত সেল Merge হয়েছে');
  };
  const applyFilter=()=>{
   const p=cellToPosition(selected)||{row:1,col:1};
