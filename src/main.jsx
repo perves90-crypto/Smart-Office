@@ -244,7 +244,8 @@ function ExcelEditor({onBack}){
  const [workbookProtected,setWorkbookProtected]=React.useState(()=>!!initialWorkbook?.workbookProtected);
  const [workbookProtectionPassword,setWorkbookProtectionPassword]=React.useState(()=>initialWorkbook?.workbookProtectionPassword||'');
  const [allowedEditRanges,setAllowedEditRanges]=React.useState(()=>initialWorkbook?.allowedEditRanges||[]);
- const [spellingEnabled,setSpellingEnabled]=React.useState(false);\n const [spellingLanguage,setSpellingLanguage]=React.useState(()=>initialWorkbook?.spellingLanguage||'en-US');
+ const [spellingEnabled,setSpellingEnabled]=React.useState(false);
+ const [spellingLanguage,setSpellingLanguage]=React.useState(()=>initialWorkbook?.spellingLanguage||'en-US');
  const [notice,setNotice]=React.useState('');
  const [chart,setChart]=React.useState(()=>initialWorkbook?.chart||null);
  const [pivotWizard,setPivotWizard]=React.useState(null);
