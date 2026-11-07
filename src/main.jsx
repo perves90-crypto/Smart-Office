@@ -76,7 +76,7 @@ function calculateFormula(source,cells,stack=[]){
   }
   return out;
  };
- const tokens=tokenize(source);let index=0;
+ let tokens=tokenize(source);let index=0;
  const peek=()=>tokens[index];
  const take=()=>tokens[index++];
  const isCell=t=>typeof t==='string'&&/^\$?[A-Z]{1,3}\$?[1-9][0-9]*$/i.test(t);
@@ -162,6 +162,26 @@ function calculateFormula(source,cells,stack=[]){
   const x=left!==null?left:textValue(value),y=right!==null?right:m[2];
   switch(m[1]){case '>':return x>y;case '<':return x<y;case '>=':return x>=y;case '<=':return x<=y;case '<>':return x!==y;default:return x===y}
  };
+ const readLazyArgs=()=>{
+  const args=[];if(peek()===')'){take();return args}
+  let start=index,depth=0;
+  while(index<tokens.length){
+   const token=tokens[index];
+   if(token==='(')depth++;
+   else if(token===')'){
+    if(depth===0){args.push(tokens.slice(start,index));index++;return args}
+    depth--;
+   }else if(token===','&&depth===0){args.push(tokens.slice(start,index));index++;start=index;continue}
+   index++;
+  }
+  throw Error('Missing )');
+ };
+ const evaluateTokens=part=>{
+  const previousTokens=tokens,previousIndex=index;tokens=part;index=0;
+  try{const value=parseCompare();if(index!==tokens.length)throw Error('Unexpected token');return value}
+  finally{tokens=previousTokens;index=previousIndex}
+ };
+ const isFormulaError=value=>typeof value==='string'&&['#VALUE!','#DIV/0!','#REF!','#NAME?','#N/A','#CYCLE!'].includes(value);
  const primary=()=>{
   const t=take();if(t===undefined)throw Error('Missing value');
   if(t==='('){const v=parseCompare();if(take()!==')')throw Error('Missing )');return v}
@@ -171,7 +191,22 @@ function calculateFormula(source,cells,stack=[]){
    if(peek()===':'){take();const second=take();if(!isCell(second))throw Error('Bad range');return rangeValues(t,second)}
    return cellValue(t);
   }
-  if(/^[A-Z_][A-Z0-9_.]*$/i.test(t)&&peek()==='('){take();return call(t.toUpperCase(),parseArgs())}
+  if(/^[A-Z_][A-Z0-9_.]*$/i.test(t)&&peek()==='('){
+   take();const name=t.toUpperCase();
+   if(name==='IF'||name==='IFERROR'){
+    const args=readLazyArgs();
+    if(name==='IF'){
+     const condition=args.length?evaluateTokens(args[0]):false;
+     const branch=truth(condition)?args[1]:args[2];
+     return branch?.length?evaluateTokens(branch):(truth(condition)?true:false);
+    }
+    let value;
+    try{value=args[0]?.length?evaluateTokens(args[0]):''}catch(error){value='#VALUE!'}
+    if((typeof value==='number'&&!Number.isFinite(value))||isFormulaError(value))return args[1]?.length?evaluateTokens(args[1]):'';
+    return value;
+   }
+   return call(name,parseArgs());
+  }
   throw Error('Unexpected value');
  };
  const unary=()=>{if(peek()==='+'){take();return +unary()}if(peek()==='-'){take();return -unary()}let v=primary();while(peek()==='%'){take();v=Number(v)/100}return v};
