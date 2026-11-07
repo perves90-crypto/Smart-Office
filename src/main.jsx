@@ -662,6 +662,41 @@ function ExcelEditor({onBack}){
    }
   }catch(error){notify(error.message)}
  };
+ const printWorkbook=()=>{
+  const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  let bounds=getSelectionBounds();
+  if(pageSetup.printArea){
+   const parts=pageSetup.printArea.split(':'),a=cellToPosition(parts[0]),b=cellToPosition(parts[1]);
+   if(a&&b)bounds={minCol:Math.min(a.col,b.col),maxCol:Math.max(a.col,b.col),minRow:Math.min(a.row,b.row),maxRow:Math.max(a.row,b.row)};
+  }else{
+   const used=Object.keys(cells).map(cellToPosition).filter(Boolean);
+   if(used.length)bounds={minCol:Math.min(...used.map(p=>p.col)),maxCol:Math.max(...used.map(p=>p.col)),minRow:Math.min(...used.map(p=>p.row)),maxRow:Math.max(...used.map(p=>p.row))};
+  }
+  const width=Math.max(1,bounds.maxCol-bounds.minCol+1),height=Math.max(1,bounds.maxRow-bounds.minRow+1);
+  const cssMargin=pageSetup.margins==='narrow'?'8mm':pageSetup.margins==='wide'?'25mm':'15mm';
+  const size=({A4:'A4',A3:'A3',A5:'A5',LETTER:'letter',LEGAL:'legal'})[pageSetup.paperSize]||'A4';
+  const tableRows=[];
+  for(let r=bounds.minRow;r<=bounds.maxRow;r++){
+   let row='<tr>';
+   if(pageSetup.printHeadings)row+='<th class="heading">'+r+'</th>';
+   for(let c=bounds.minCol;c<=bounds.maxCol;c++){
+    const addr=positionToCell(c,r),raw=cells[addr],value=typeof raw==='string'&&raw.startsWith('=')?calculateCell(addr,cells):raw;
+    const st=cellStyles[addr]||{},styles=[];
+    if(st.bold)styles.push('font-weight:bold');if(st.italic)styles.push('font-style:italic');if(st.underline)styles.push('text-decoration:underline');
+    if(st.color)styles.push('color:'+esc(st.color));if(st.backgroundColor)styles.push('background-color:'+esc(st.backgroundColor));
+    if(st.textAlign)styles.push('text-align:'+st.textAlign);if(st.verticalAlign)styles.push('vertical-align:'+st.verticalAlign);
+    if(st.border)styles.push('border:'+esc(st.border));if(st.whiteSpace==='normal')styles.push('white-space:normal;overflow-wrap:anywhere');
+    row+='<td style="'+styles.join(';')+'">'+esc(value===undefined?'':value)+'</td>';
+   }
+   row+='</tr>';tableRows.push(row);
+  }
+  const headings=pageSetup.printHeadings?'<tr><th class="heading"></th>'+Array.from({length:width},(_,i)=>'<th class="heading">'+esc(colName(bounds.minCol+i))+'</th>').join('')+'</tr>':'';
+  const grid=pageSetup.printGridlines?'1px solid #cbd5e1':'1px solid transparent';
+  const popup=window.open('','_blank');
+  if(!popup){notify('Print window blocked — popup permission চালু করুন');return}
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>'+esc(workbookName)+' - '+esc(sheet)+'</title><style>@page{size:'+size+' '+pageSetup.orientation+';margin:'+cssMargin+'}*{box-sizing:border-box}body{font:11px Arial,sans-serif;color:#111;margin:0}.printHead{text-align:center;font-weight:bold;margin-bottom:12px}.printFoot{text-align:center;margin-top:12px}table{border-collapse:collapse;width:'+((pageSetup.scale||100)/100*100)+'%;table-layout:auto}td,th{border:'+grid+';padding:5px;min-width:55px;overflow-wrap:anywhere}th.heading{background:#f1f5f9;text-align:center;font-weight:bold}.sheetName{font-size:10px;color:#555;margin-bottom:6px}</style></head><body><div class="printHead">'+esc(headerFooter.header||'')+'</div><div class="sheetName">'+esc(workbookName)+' — '+esc(sheet)+'</div><table>'+headings+tableRows.join('')+'</table><div class="printFoot">'+esc(headerFooter.footer||'')+'</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\\/script></body></html>';
+  popup.document.open();popup.document.write(html);popup.document.close();
+ };
  const action=(name)=>{
   if(name==='Undo'){undo();return}
   if(name==='Redo'){redo();return}
@@ -747,7 +782,7 @@ function ExcelEditor({onBack}){
   if(name==='Zoom In'){setSheetZoom(v=>Math.min(2,+(v+0.1).toFixed(2)));return}
   if(name==='Zoom Out'){setSheetZoom(v=>Math.max(0.5,+(v-0.1).toFixed(2)));return}
   if(name==='100%'){setSheetZoom(1);return}
-  if(name==='Print'||name==='Export PDF'){window.print();notify('Print dialog খুলেছে — PDF হিসেবে Save করতে পারবেন');return}
+  if(name==='Print'||name==='Export PDF'){printWorkbook();return}
   if(name==='Margins'){
    const choice=window.prompt('Page Margins নির্বাচন করুন: normal / narrow / wide','normal');if(choice===null)return;
    if(!['normal','narrow','wide'].includes(choice.toLowerCase())){notify('normal, narrow অথবা wide লিখুন');return}
