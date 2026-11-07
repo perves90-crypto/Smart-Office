@@ -28,6 +28,10 @@ jobs:
           npm run build
           npx cap init "Smart Office" "com.smartoffice.app" --web-dir=dist
           npx cap add android
+          npm install --save-dev @capacitor/assets
+          mkdir -p assets
+          curl -L "https://raw.githubusercontent.com/perves90-crypto/Smart-Office/main/smart-office-logo-1.png" -o assets/icon.png
+          npx capacitor-assets generate --android
           npx cap sync android
       - name: Build debug APK
         run: |
