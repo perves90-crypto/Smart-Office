@@ -40,6 +40,12 @@ const ribbonData = {
   {group:'Formula Auditing',items:[['Show Precedents',Search],['Show Dependents',Search],['Evaluate Formula',Check],['Error Checking',ShieldCheck]]},
   {group:'Calculation',items:[['Calculate Now',Redo2]]}
  ],
+ PageLayout: [
+  {group:'Page Setup',items:[['Margins',FileText],['Orientation',FileText],['Paper Size',FileText],['Print Area',Printer]]},
+  {group:'Scale to Fit',items:[['Fit to Width',Grid2X2],['Fit to Height',Grid2X2],['Scale',Percent]]},
+  {group:'Sheet Options',items:[['Print Gridlines',Grid2X2],['Print Headings',Table2]]},
+  {group:'Arrange',items:[['Page Order',ArrowDownUp],['Page Setup Reset',Undo2]]}
+ ],
  Review: [
   {group:'Proofing',items:[['Spelling',Check],['Check Workbook',ClipboardCheck],['Workbook Statistics',FileSpreadsheet]]},
   {group:'Comments',items:[['New Comment',MessageSquare],['Show Comments',MessageSquare],['Notes',FileText],['Delete All Comments',X]]},
@@ -47,7 +53,7 @@ const ribbonData = {
  ]
 };
 function ColumnsIcon(){return <Table2/>}
-const menus=[['Home',Home],['File',Folder],['View',Eye],['Insert',Plus],['Data',Database],['Review',ClipboardCheck],['Formulas',Calculator]];
+const menus=[['Home',Home],['File',Folder],['View',Eye],['Insert',Plus],['Data',Database],['Review',ClipboardCheck],['Formulas',Calculator],['Page Layout',FileText]];
 function cellToPosition(ref){
  const m=String(ref).toUpperCase().match(/^([A-Z]+)([1-9][0-9]*)$/);if(!m)return null;
  let col=0;for(const ch of m[1])col=col*26+ch.charCodeAt(0)-64;
@@ -227,7 +233,7 @@ function ExcelEditor({onBack}){
  const [initialWorkbook]=React.useState(loadSavedWorkbook);
  const [isRestoring,setIsRestoring]=React.useState(true);
  const [isImporting,setIsImporting]=React.useState(false);
- React.useEffect(()=>{let live=true;try{const req=indexedDB.open('SmartOfficeWorkbookDB',1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('workbooks'))req.result.createObjectStore('workbooks')};req.onsuccess=()=>{const db=req.result,tx=db.transaction('workbooks','readonly'),get=tx.objectStore('workbooks').get('current');get.onsuccess=()=>{if(live){const disk=get.result;const local=initialWorkbook;const diskTime=Date.parse(disk?.savedAt||'')||0;const localTime=Date.parse(local?.savedAt||'')||0;const d=(local&&localTime>diskTime)?local:(disk||local);if(d){setSheetStore(d.sheets||{[d.sheet||'Sheet1']:{cells:d.cells||{},cellStyles:d.cellStyles||{}}});setCells(d.cells||{});setCellStyles(d.cellStyles||{});setSheet(d.sheet||'Sheet1');setWorkbookName(d.workbookName||'Book1');setChart(d.chart||null);setPivot(d.pivot||null);setRowHeights(d.rowHeights||{});setColumnWidths(d.columnWidths||{});setHiddenRows(d.hiddenRows||[]);setHiddenCols(d.hiddenCols||[]);setMergedRanges(d.mergedRanges||[]);setFilterConfig(d.filterConfig||null);setDataValidations(d.dataValidations||{});setHeaderFooter(d.headerFooter||{header:'',footer:''});setSheetProtected(!!d.sheetProtected);setSheetProtectionPassword(d.sheetProtectionPassword||'');setWorkbookProtected(!!d.workbookProtected);setWorkbookProtectionPassword(d.workbookProtectionPassword||'');setAllowedEditRanges(d.allowedEditRanges||[]);setFilter(!!d.filterConfig)}}if(live)setIsRestoring(false);db.close()};get.onerror=()=>{if(live)setIsRestoring(false);db.close()}};req.onerror=()=>{if(live)setIsRestoring(false)}}catch{setIsRestoring(false)}return()=>{live=false}},[]);
+ React.useEffect(()=>{let live=true;try{const req=indexedDB.open('SmartOfficeWorkbookDB',1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('workbooks'))req.result.createObjectStore('workbooks')};req.onsuccess=()=>{const db=req.result,tx=db.transaction('workbooks','readonly'),get=tx.objectStore('workbooks').get('current');get.onsuccess=()=>{if(live){const disk=get.result;const local=initialWorkbook;const diskTime=Date.parse(disk?.savedAt||'')||0;const localTime=Date.parse(local?.savedAt||'')||0;const d=(local&&localTime>diskTime)?local:(disk||local);if(d){setSheetStore(d.sheets||{[d.sheet||'Sheet1']:{cells:d.cells||{},cellStyles:d.cellStyles||{}}});setCells(d.cells||{});setCellStyles(d.cellStyles||{});setSheet(d.sheet||'Sheet1');setWorkbookName(d.workbookName||'Book1');setChart(d.chart||null);setPivot(d.pivot||null);setRowHeights(d.rowHeights||{});setColumnWidths(d.columnWidths||{});setHiddenRows(d.hiddenRows||[]);setHiddenCols(d.hiddenCols||[]);setMergedRanges(d.mergedRanges||[]);setFilterConfig(d.filterConfig||null);setDataValidations(d.dataValidations||{});setHeaderFooter(d.headerFooter||{header:'',footer:''});setPageSetup(d.pageSetup||{margins:'normal',orientation:'portrait',paperSize:'A4',printArea:'',fitWidth:1,fitHeight:0,scale:100,printGridlines:false,printHeadings:false,pageOrder:'down'});setSheetProtected(!!d.sheetProtected);setSheetProtectionPassword(d.sheetProtectionPassword||'');setWorkbookProtected(!!d.workbookProtected);setWorkbookProtectionPassword(d.workbookProtectionPassword||'');setAllowedEditRanges(d.allowedEditRanges||[]);setFilter(!!d.filterConfig)}}if(live)setIsRestoring(false);db.close()};get.onerror=()=>{if(live)setIsRestoring(false);db.close()}};req.onerror=()=>{if(live)setIsRestoring(false)}}catch{setIsRestoring(false)}return()=>{live=false}},[]);
  const [active,setActive]=React.useState('Home');
  const [menuOpen,setMenuOpen]=React.useState(false);
  const [selected,setSelected]=React.useState('A1');
@@ -244,6 +250,7 @@ function ExcelEditor({onBack}){
  const [sheet,setSheet]=React.useState(()=>initialWorkbook?.sheet||'Sheet1');
  const [workbookName,setWorkbookName]=React.useState(()=>initialWorkbook?.workbookName||'Book1');
  const [headerFooter,setHeaderFooter]=React.useState(()=>initialWorkbook?.headerFooter||{header:'',footer:''});
+ const [pageSetup,setPageSetup]=React.useState(()=>initialWorkbook?.pageSetup||{margins:'normal',orientation:'portrait',paperSize:'A4',printArea:'',fitWidth:1,fitHeight:0,scale:100,printGridlines:false,printHeadings:false,pageOrder:'down'});
  const [sheetProtected,setSheetProtected]=React.useState(()=>!!initialWorkbook?.sheetProtected);
  const [sheetProtectionPassword,setSheetProtectionPassword]=React.useState(()=>initialWorkbook?.sheetProtectionPassword||'');
  const [workbookProtected,setWorkbookProtected]=React.useState(()=>!!initialWorkbook?.workbookProtected);
@@ -299,7 +306,7 @@ function ExcelEditor({onBack}){
   return()=>{active=false;window.removeEventListener('popstate',onPopState);window.removeEventListener('keydown',onKeyDown);nativeBackListener?.remove?.()};
  },[]);
 
- React.useEffect(()=>{if(isRestoring)return;const timer=setTimeout(()=>{const all={...sheetStore,[sheet]:{cells,cellStyles}};setSheetStore(all);const data={sheets:all,cells,cellStyles,sheet,workbookName,chart,pivot,rowHeights,columnWidths,hiddenRows,hiddenCols,mergedRanges,filterConfig,dataValidations,headerFooter,sheetProtected,sheetProtectionPassword,workbookProtected,workbookProtectionPassword,allowedEditRanges,spellingLanguage,savedAt:new Date().toISOString()};try{localStorage.setItem('smartoffice-workbook',JSON.stringify(data))}catch{};try{const request=indexedDB.open('SmartOfficeWorkbookDB',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('workbooks'))request.result.createObjectStore('workbooks')};request.onsuccess=()=>{const db=request.result,tx=db.transaction('workbooks','readwrite');tx.objectStore('workbooks').put(data,'current');tx.oncomplete=()=>db.close();tx.onerror=()=>{db.close();notify('Workbook auto-save failed. Please export a backup')}};request.onerror=()=>notify('Device storage unavailable. Please export a backup')}catch{notify('Device storage unavailable. Please export a backup')}},500);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName,chart,pivot,rowHeights,columnWidths,hiddenRows,hiddenCols,mergedRanges,filterConfig,dataValidations,headerFooter,sheetProtected,sheetProtectionPassword,workbookProtected,workbookProtectionPassword,allowedEditRanges,spellingLanguage,isRestoring]);
+ React.useEffect(()=>{if(isRestoring)return;const timer=setTimeout(()=>{const all={...sheetStore,[sheet]:{cells,cellStyles}};setSheetStore(all);const data={sheets:all,cells,cellStyles,sheet,workbookName,chart,pivot,rowHeights,columnWidths,hiddenRows,hiddenCols,mergedRanges,filterConfig,dataValidations,headerFooter,pageSetup,sheetProtected,sheetProtectionPassword,workbookProtected,workbookProtectionPassword,allowedEditRanges,spellingLanguage,savedAt:new Date().toISOString()};try{localStorage.setItem('smartoffice-workbook',JSON.stringify(data))}catch{};try{const request=indexedDB.open('SmartOfficeWorkbookDB',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('workbooks'))request.result.createObjectStore('workbooks')};request.onsuccess=()=>{const db=request.result,tx=db.transaction('workbooks','readwrite');tx.objectStore('workbooks').put(data,'current');tx.oncomplete=()=>db.close();tx.onerror=()=>{db.close();notify('Workbook auto-save failed. Please export a backup')}};request.onerror=()=>notify('Device storage unavailable. Please export a backup')}catch{notify('Device storage unavailable. Please export a backup')}},500);return()=>clearTimeout(timer)},[cells,cellStyles,sheet,workbookName,chart,pivot,rowHeights,columnWidths,hiddenRows,hiddenCols,mergedRanges,filterConfig,dataValidations,headerFooter,pageSetup,sheetProtected,sheetProtectionPassword,workbookProtected,workbookProtectionPassword,allowedEditRanges,spellingLanguage,isRestoring]);
  const selectCell=(id)=>{setSelected(id);setFormula(cells[id]??'');setSelectionBand(null)};
  const selectWholeColumn=(col)=>{const id=positionToCell(col,1);setSelected(id);setFormula(cells[id]??'');setSelectionBand({axis:'col',index:col});notify(colName(col)+' কলাম সম্পূর্ণ সিলেক্ট হয়েছে');};
  const selectWholeRow=(row)=>{const id=positionToCell(1,row);setSelected(id);setFormula(cells[id]??'');setSelectionBand({axis:'row',index:row});notify(row+' নম্বর Row সম্পূর্ণ সিলেক্ট হয়েছে');};
@@ -741,6 +748,40 @@ function ExcelEditor({onBack}){
   if(name==='Zoom Out'){setSheetZoom(v=>Math.max(0.5,+(v-0.1).toFixed(2)));return}
   if(name==='100%'){setSheetZoom(1);return}
   if(name==='Print'||name==='Export PDF'){window.print();notify('Print dialog খুলেছে — PDF হিসেবে Save করতে পারবেন');return}
+  if(name==='Margins'){
+   const choice=window.prompt('Page Margins নির্বাচন করুন: normal / narrow / wide','normal');if(choice===null)return;
+   if(!['normal','narrow','wide'].includes(choice.toLowerCase())){notify('normal, narrow অথবা wide লিখুন');return}
+   setPageSetup(v=>({...v,margins:choice.toLowerCase()}));notify('Page margins: '+choice);return;
+  }
+  if(name==='Orientation'){
+   const choice=window.prompt('Orientation লিখুন: portrait / landscape',pageSetup.orientation);if(choice===null)return;
+   if(!['portrait','landscape'].includes(choice.toLowerCase())){notify('portrait অথবা landscape লিখুন');return}
+   setPageSetup(v=>({...v,orientation:choice.toLowerCase()}));notify('Orientation: '+choice);return;
+  }
+  if(name==='Paper Size'){
+   const choice=window.prompt('Paper size লিখুন: A4 / A3 / A5 / Letter / Legal',pageSetup.paperSize);if(choice===null)return;
+   if(!['A4','A3','A5','LETTER','LEGAL'].includes(choice.toUpperCase())){notify('A4, A3, A5, Letter অথবা Legal লিখুন');return}
+   setPageSetup(v=>({...v,paperSize:choice.toUpperCase()}));notify('Paper size: '+choice.toUpperCase());return;
+  }
+  if(name==='Print Area'){
+   const b=getSelectionBounds(),current=pageSetup.printArea||positionToCell(b.minCol,b.minRow)+':'+positionToCell(b.maxCol,b.maxRow);
+   const choice=window.prompt('Print Area লিখুন (যেমন A1:F25), খালি রাখলে Clear হবে:',current);if(choice===null)return;
+   const clean=choice.trim().toUpperCase().replace(/\\s/g,'');
+   if(clean&&!/^[A-Z]{1,3}[1-9][0-9]*:[A-Z]{1,3}[1-9][0-9]*$/.test(clean)){notify('সঠিক Range লিখুন, যেমন A1:F25');return}
+   setPageSetup(v=>({...v,printArea:clean}));notify(clean?'Print Area সেট হয়েছে: '+clean:'Print Area Clear হয়েছে');return;
+  }
+  if(name==='Fit to Width'||name==='Fit to Height'){
+   const key=name==='Fit to Width'?'fitWidth':'fitHeight',value=Number(window.prompt('কত Page-এ Fit করবেন? (0 = automatic)',String(pageSetup[key])));if(!Number.isInteger(value)||value<0||value>20){notify('০ থেকে ২০-এর মধ্যে সংখ্যা দিন');return}
+   setPageSetup(v=>({...v,[key]:value}));notify(name+' সেট হয়েছে');return;
+  }
+  if(name==='Scale'){
+   const value=Number(window.prompt('Print Scale (%) লিখুন: 10–400',String(pageSetup.scale)));if(!Number.isInteger(value)||value<10||value>400){notify('Scale ১০ থেকে ৪০০-এর মধ্যে দিন');return}
+   setPageSetup(v=>({...v,scale:value}));notify('Print scale '+value+'%');return;
+  }
+  if(name==='Print Gridlines'){setPageSetup(v=>({...v,printGridlines:!v.printGridlines}));notify('Print Gridlines '+(!pageSetup.printGridlines?'On':'Off'));return}
+  if(name==='Print Headings'){setPageSetup(v=>({...v,printHeadings:!v.printHeadings}));notify('Print Headings '+(!pageSetup.printHeadings?'On':'Off'));return}
+  if(name==='Page Order'){const value=window.prompt('Page order লিখুন: down / over',pageSetup.pageOrder);if(value===null)return;if(!['down','over'].includes(value.toLowerCase())){notify('down অথবা over লিখুন');return}setPageSetup(v=>({...v,pageOrder:value.toLowerCase()}));return}
+  if(name==='Page Setup Reset'){setPageSetup({margins:'normal',orientation:'portrait',paperSize:'A4',printArea:'',fitWidth:1,fitHeight:0,scale:100,printGridlines:false,printHeadings:false,pageOrder:'down'});notify('Page Setup default-এ Reset হয়েছে');return}
   if(name==='Workbook Info'){const used=Object.values(cells).filter(v=>v!==''&&v!==null&&v!==undefined).length;window.alert('Workbook: '+workbookName+'\\nSheet: '+sheet+'\\nUsed cells: '+used+'\\nZoom: '+Math.round(sheetZoom*100)+'%');return}
   if(name==='Workbook Statistics'){const vals=Object.values(cells).filter(v=>v!==''&&v!==null&&v!==undefined);const nums=vals.map(Number).filter(Number.isFinite);window.alert('Cells: '+vals.length+'\\nNumbers: '+nums.length+'\\nText: '+(vals.length-nums.length)+'\\nSheets: '+(Object.keys(sheetStore).length||1));return}
   if(name==='Sort A to Z'||name==='Sort Z to A'){sortSelection(name==='Sort A to Z'?'asc':'desc');return}
