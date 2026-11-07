@@ -298,8 +298,9 @@ function ExcelEditor({onBack}){
   setMergedHistory(h=>[...h.slice(0,historyIndex+1),nextMerged].slice(-101));
   setHistoryIndex(i=>Math.min(i+1,100));
  };
+ const isCellEditable=(id)=>{if(!sheetProtected)return true;const p=cellToPosition(id);return !!p&&allowedEditRanges.some(range=>{const m=String(range).toUpperCase().match(/^\$?([A-Z]+)\$?([1-9][0-9]*):\$?([A-Z]+)\$?([1-9][0-9]*)$/);if(!m)return false;const x=cellToPosition(m[1]+m[2]),y=cellToPosition(m[3]+m[4]);return x&&y&&p.row>=Math.min(x.row,y.row)&&p.row<=Math.max(x.row,y.row)&&p.col>=Math.min(x.col,y.col)&&p.col<=Math.max(x.col,y.col)});};
  const updateCell=(id,value)=>{
-  if(sheetProtected){const p=cellToPosition(id);const permitted=allowedEditRanges.some(range=>{const m=String(range).toUpperCase().match(/^\$?([A-Z]+)\$?([1-9][0-9]*):\$?([A-Z]+)\$?([1-9][0-9]*)$/);if(!m)return false;const a=cellToPosition(m[1]+m[2]),b=cellToPosition(m[3]+m[4]);return p&&a&&b&&p.row>=Math.min(a.row,b.row)&&p.row<=Math.max(a.row,b.row)&&p.col>=Math.min(a.col,b.col)&&p.col<=Math.max(a.col,b.col)});if(!permitted){notify('Sheet protected — এই সেল সম্পাদনার অনুমতি নেই');return}}
+  if(!isCellEditable(id)){notify('Sheet protected — এই সেলে সম্পাদনার অনুমতি নেই');return}
   const rule=dataValidations[id];
   if(rule){
    const raw=String(value??'');
@@ -356,15 +357,24 @@ function ExcelEditor({onBack}){
  const pasteMatrix=(matrix,stylesMatrix=null)=>{
   if(!matrix?.length)return;
   const start=cellToPosition(selected)||{row:1,col:1},next={...cells},nextStyles={...cellStyles};
+  let skipped=0,invalid=0;
   matrix.forEach((line,ri)=>line.forEach((value,ci)=>{
-   const id=positionToCell(start.col+ci,start.row+ri);next[id]=value;
+   const id=positionToCell(start.col+ci,start.row+ri);
+   if(!isCellEditable(id)){skipped++;return}
+   const rule=dataValidations[id],raw=String(value??'').trim();
+   if(rule&&raw!==''){
+    const n=Number(raw);
+    const valid=rule.type==='list'?rule.values.includes(raw):((rule.type==='whole'||rule.type==='decimal')&&Number.isFinite(n)&&(rule.type!=='whole'||Number.isInteger(n))&&n>=rule.min&&n<=rule.max);
+    if(!valid){invalid++;return}
+   }
+   next[id]=value;
    const copiedStyle=stylesMatrix?.[ri]?.[ci];
    if(copiedStyle)nextStyles[id]={...copiedStyle};else if(stylesMatrix)delete nextStyles[id];
   }));
   setCells(next);if(stylesMatrix)setCellStyles(nextStyles);
   recordHistory(next,nextStyles);
   const last=positionToCell(start.col+(matrix[0]?.length||1)-1,start.row+matrix.length-1);
-  setSelectionBand({axis:'range',start:selected,end:last});setFormula(next[selected]??'');notify('Paste সম্পন্ন হয়েছে');
+  setSelectionBand({axis:'range',start:selected,end:last});setFormula(next[selected]??'');notify('Paste সম্পন্ন: '+(matrix.reduce((n,line)=>n+line.length,0)-skipped-invalid)+'টি; Protected '+skipped+', Validation rejected '+invalid);
  };
  const pasteCell=()=>{
   if(!clipboard){notify('আগে Copy করুন অথবা বাইরের লেখা Paste করুন');return}
@@ -385,8 +395,8 @@ function ExcelEditor({onBack}){
  };
  const clearSelection=(mode)=>{
   const b=getSelectionBounds(),nextCells={...cells},nextStyles={...cellStyles};
-  for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++){const id=positionToCell(c,r);if(mode!=='formats')delete nextCells[id];if(mode!=='contents')delete nextStyles[id];}
-  setCells(nextCells);setCellStyles(nextStyles);recordHistory(nextCells,nextStyles);setFormula(nextCells[selected]??'');notify(mode==='contents'?'নির্বাচিত সেলের লেখা মুছে ফেলা হয়েছে':mode==='formats'?'নির্বাচিত সেলের ফরম্যাট মুছে ফেলা হয়েছে':'নির্বাচিত সেল সম্পূর্ণ পরিষ্কার হয়েছে');
+  let skipped=0;for(let r=b.minRow;r<=b.maxRow;r++)for(let c=b.minCol;c<=b.maxCol;c++){const id=positionToCell(c,r);if(!isCellEditable(id)){skipped++;continue}if(mode!=='formats')delete nextCells[id];if(mode!=='contents')delete nextStyles[id];}
+  setCells(nextCells);setCellStyles(nextStyles);recordHistory(nextCells,nextStyles);setFormula(nextCells[selected]??'');notify((mode==='contents'?'নির্বাচিত সেলের লেখা মুছে ফেলা হয়েছে':mode==='formats'?'নির্বাচিত সেলের ফরম্যাট মুছে ফেলা হয়েছে':'নির্বাচিত সেল সম্পূর্ণ পরিষ্কার হয়েছে')+(skipped?' ('+skipped+' protected cell skipped)':''));
  };
  const setFormat=(format)=>{
   const formats={General:null,Number:'number',Currency:'currency',Accounting:'accounting',Percentage:'percent',Date:'date',Time:'time',Fraction:'fraction',Scientific:'scientific',Text:'text'};
@@ -394,10 +404,10 @@ function ExcelEditor({onBack}){
  };
  const fillSelection=(axis)=>{
   const b=getSelectionBounds(),origin=cellToPosition(selected)||{row:b.minRow,col:b.minCol},source=cells[selected]??'',next={...cells};
-  if(axis==='down'){for(let r=origin.row+1;r<=b.maxRow;r++)next[positionToCell(origin.col,r)]=source;}
-  else {for(let c=origin.col+1;c<=b.maxCol;c++)next[positionToCell(c,origin.row)]=source;}
+  let skipped=0;if(axis==='down'){for(let r=origin.row+1;r<=b.maxRow;r++){const id=positionToCell(origin.col,r);if(isCellEditable(id))next[id]=source;else skipped++;}}
+  else {for(let c=origin.col+1;c<=b.maxCol;c++){const id=positionToCell(c,origin.row);if(isCellEditable(id))next[id]=source;else skipped++;}}
   setCells(next);recordHistory(next);
-  notify(axis==='down'?'Fill Down সম্পন্ন':'Fill Right সম্পন্ন');
+  notify((axis==='down'?'Fill Down সম্পন্ন':'Fill Right সম্পন্ন')+(skipped?' ('+skipped+' protected cell skipped)':''));
  };
  const sortSelection=(direction)=>{
   const b=getSelectionBounds(),p=cellToPosition(selected)||{row:b.minRow,col:b.minCol};
