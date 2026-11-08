@@ -298,6 +298,10 @@ jobs:
           if 'BikeLocationService' not in s: s=s.replace('</application>',service+'</application>')
           p.write_text(s)
           PY
+          # The native Google sign-in dependency requires Android Gradle Plugin 8.9.1+.
+          find android -type f \\( -name '*.gradle' -o -name '*.gradle.kts' \\) -exec sed -i 's/8.7.2/8.9.1/g' {} +
+          echo "=== Android Gradle Plugin version ==="
+          grep -R "com.android.tools.build:gradle" android/*.gradle android/**/*.gradle 2>/dev/null || true
       - name: Download Gradle from independent mirror
         run: |
           set -e
