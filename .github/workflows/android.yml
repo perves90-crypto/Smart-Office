@@ -107,7 +107,7 @@ jobs:
               String action=intent==null?ACTION_START:intent.getAction();
               if(ACTION_STOP.equals(action)){stopTracking();stopForeground(true);stopSelf();return START_NOT_STICKY;}
               notification();
-              getSharedPreferences(PREF,0).edit().putString("points","[]").putFloat("distanceM",0).putFloat("maxSpeed",0).putLong("startedAt",System.currentTimeMillis()).putBoolean("tracking",true).apply();
+              if(intent!=null && ACTION_START.equals(action))getSharedPreferences(PREF,0).edit().putString("points","[]").putFloat("distanceM",0).putFloat("maxSpeed",0).putLong("startedAt",System.currentTimeMillis()).putBoolean("tracking",true).apply();
               startGps(); return START_STICKY;
             }
             private void startGps(){
