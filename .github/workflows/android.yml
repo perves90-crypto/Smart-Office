@@ -33,6 +33,9 @@ jobs:
           curl -L "https://raw.githubusercontent.com/perves90-crypto/Smart-Office/main/smart-office-logo-1.png" -o assets/icon.png
           npx capacitor-assets generate --android
           npx cap sync android
+      - name: Increase Gradle distribution download timeout
+        run: |
+          echo 'networkTimeout=120000' >> android/gradle/wrapper/gradle-wrapper.properties
       - name: Build debug APK
         run: |
           cd android
