@@ -1162,7 +1162,7 @@ function BikeTracker({onBack}){
  React.useEffect(()=>{localStorage.setItem('smartoffice-bike-maintenance',JSON.stringify(maintenance))},[maintenance]);
  React.useEffect(()=>{localStorage.setItem('smartoffice-bike-speed-limit',String(speedLimit))},[speedLimit]);
 
- const watchRef=React.useRef(null),activeRef=React.useRef(activeRide),stillRef=React.useRef(0),movingRef=React.useRef(0),lastFixRef=React.useRef(null);
+ const watchRef=React.useRef(null),activeRef=React.useRef(activeRide),stillRef=React.useRef(0),movingRef=React.useRef(0),lastFixRef=React.useRef(null);const finishingRef=React.useRef(false);
  React.useEffect(()=>{activeRef.current=activeRide;localStorage.setItem('smartoffice-bike-active',JSON.stringify(activeRide))},[activeRide]);
  React.useEffect(()=>{localStorage.setItem('smartoffice-bike-rides',JSON.stringify(rides))},[rides]);
  React.useEffect(()=>{localStorage.setItem('smartoffice-bike-fuel-price',String(fuelPrice))},[fuelPrice]);
@@ -1175,12 +1175,12 @@ function BikeTracker({onBack}){
   if(Capacitor.isNativePlatform())BikeTracking.startTracking().catch(()=>setGpsError('Native background tracking could not start. Check location permission.'));
  };
  const finishRide=async()=>{
-  const ride=activeRef.current;if(!ride)return;
+  const ride=activeRef.current;if(!ride||finishingRef.current)return;finishingRef.current=true;
   let native={};if(Capacitor.isNativePlatform()){try{await BikeTracking.stopTracking();await new Promise(resolve=>setTimeout(resolve,300));native=await BikeTracking.getTrackData();}catch(e){}}
   let nativePoints=[];try{nativePoints=JSON.parse(native.pointsJson||'[]')}catch(e){}
   const finished={...ride,points:nativePoints.length?nativePoints:ride.points,distanceM:native.distanceM>0?native.distanceM:ride.distanceM,maxSpeed:Math.max(ride.maxSpeed||0,native.maxSpeed||0),endAt:new Date().toISOString(),seconds:Math.max(ride.seconds,Math.floor((Date.now()-Date.parse(ride.startAt))/1000))};
   if(finished.points.length>1||finished.distanceM>20){setRides(old=>[finished,...old].slice(0,2000))}
-  activeRef.current=null;setActiveRide(null);setSpeed(0);setDistance(0);setElapsed(0);stillRef.current=0;movingRef.current=0;
+  activeRef.current=null;setActiveRide(null);setSpeed(0);setDistance(0);setElapsed(0);stillRef.current=0;movingRef.current=0;finishingRef.current=false;
  };
  React.useEffect(()=>{
   if(!navigator.geolocation){setGpsStatus('GPS not supported');return}
