@@ -1132,7 +1132,7 @@ function BikeRouteMap({ride}){
  return <div className="bikeRealMap" ref={host}><div className="bikeMapHint">{ride&&ride.points&&ride.points.length?'GPS route':'Waiting for GPS points'}</div></div>;
 }
 function BikeTracker({onBack}){
- const [googleClientId,setGoogleClientId]=React.useState(()=>localStorage.getItem('smartoffice-google-client-id')||'');
+ const [googleClientId,setGoogleClientId]=React.useState(()=>localStorage.getItem('smartoffice-google-client-id')||'1087358476161-e39vuhvnn3d9ran0loc6m0rbrfnek51n.apps.googleusercontent.com');
  const [googleToken,setGoogleToken]=React.useState('');
  const [googleEmail,setGoogleEmail]=React.useState('');
  const [cloudStatus,setCloudStatus]=React.useState('Not connected');
