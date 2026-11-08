@@ -270,7 +270,7 @@ jobs:
           bt = s.find("buildTypes {")
           if bt < 0:
               raise SystemExit("Could not locate buildTypes block")
-          match = re.search(r"(?m)^\\s*release\\s*\\{", s[bt:])
+          match = re.search(r"(?m)^\s*release\s*\{", s[bt:])
           if not match:
               raise SystemExit("Could not locate release buildType")
           start = bt + match.start()
@@ -289,7 +289,7 @@ jobs:
               raise SystemExit("Unbalanced release buildType braces")
           block = s[brace:end]
           if "signingConfig" not in block:
-              s = s[:end] + "\\n            signingConfig signingConfigs.release\\n        " + s[end:]
+              s = s[:end] + "\n            signingConfig signingConfigs.release\n        " + s[end:]
           p.write_text(s)
           PY
       - name: Build signed release APK
