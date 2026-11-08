@@ -134,3 +134,9 @@
 .bikeRideDetails b{font-size:11px;color:#263f62}
 .bikeRideDetails>button{grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border:0;border-radius:9px;background:linear-gradient(145deg,#397fe2,#2452a4);color:#fff;font-size:10px;font-weight:700}
 .bikeRideDetails>button:disabled{opacity:.45}
+
+
+.bikeHistoryFilters{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.bikeHistoryFilters button{border:1px solid #dce5f1;background:#fff;color:#6c7d93;border-radius:18px;padding:7px 11px;font-size:9px;font-weight:800}
+.bikeHistoryFilters button.active{background:linear-gradient(145deg,#397fe2,#2452a4);border-color:#2c64b4;color:#fff;box-shadow:0 3px 7px #2452a433}
+.bikeHistoryFilters span{margin-left:auto;color:#8291a6;font-size:9px;font-weight:700}
