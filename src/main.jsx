@@ -1169,8 +1169,16 @@ function BikeTracker({onBack}){
   if(!window.google?.accounts?.oauth2)throw new Error('Google Sign-In is unavailable');
  };
  const requestGoogleToken=async(prompt='consent')=>{
-  if(!googleClientId.trim())throw new Error('Enter your Google OAuth Client ID first');
+  if(!googleClientId.trim())throw new Error('Enter your Google Web Client ID first');
   localStorage.setItem('smartoffice-google-client-id',googleClientId.trim());
+  if(window.Capacitor?.isNativePlatform?.()){
+   const {SocialLogin}=await import('@capgo/capacitor-social-login');
+   await SocialLogin.initialize({google:{webClientId:googleClientId.trim(),mode:'online'}});
+   const login=await SocialLogin.login({provider:'google',options:{scopes:['https://www.googleapis.com/auth/drive.file']}});
+   const result=login?.result||{};
+   if(!result.accessToken)throw new Error('Google sign-in completed but Drive access token was not returned. Please try again.');
+   return result.accessToken;
+  }
   await getGoogleIdentity();
   return new Promise((resolve,reject)=>{
    const client=window.google.accounts.oauth2.initTokenClient({client_id:googleClientId.trim(),scope:'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email',include_granted_scopes:true,prompt,callback:response=>{if(response.error||!response.access_token){reject(new Error(response.error_description||response.error||'Google authorization failed'));return}resolve(response.access_token)},error_callback:error=>reject(new Error(error.message||'Google sign-in popup failed'))});
