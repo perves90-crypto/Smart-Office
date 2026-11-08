@@ -1154,22 +1154,19 @@ function BikeTracker({onBack}){
  const [fuelLogs,setFuelLogs]=React.useState(()=>{try{return JSON.parse(localStorage.getItem('smartoffice-bike-fuel-logs')||'[]')}catch{return[]}});
  const [maintenance,setMaintenance]=React.useState(()=>{try{return JSON.parse(localStorage.getItem('smartoffice-bike-maintenance')||'[]')}catch{return[]}});
  const [speedLimit,setSpeedLimit]=React.useState(()=>Number(localStorage.getItem('smartoffice-bike-speed-limit')||80));
+ const [nativeDataReady,setNativeDataReady]=React.useState(false);
+ const nativeSaveTimer=React.useRef(null);
+ React.useEffect(()=>{let alive=true;(async()=>{let nativeData=null;try{if(Capacitor.isNativePlatform()){const result=await BikeTracking.getBikeData();nativeData=JSON.parse(result.dataJson||'null')}}catch(e){}if(!alive)return;if(nativeData&&nativeData.version===2){setRides(Array.isArray(nativeData.rides)?nativeData.rides:[]);setActiveRide(nativeData.activeRide||null);setMotorcycles(Array.isArray(nativeData.motorcycles)&&nativeData.motorcycles.length?nativeData.motorcycles:[{id:'bike-default',name:'My Motorcycle'}]);setSelectedBikeId(nativeData.selectedBikeId||'bike-default');setFuelLogs(Array.isArray(nativeData.fuelLogs)?nativeData.fuelLogs:[]);setMaintenance(Array.isArray(nativeData.maintenance)?nativeData.maintenance:[]);setFuelPrice(Number(nativeData.fuelPrice)||120);setSpeedLimit(Number(nativeData.speedLimit)||80)}setNativeDataReady(true)})();return()=>{alive=false}},[]);
  const [fuelLitres,setFuelLitres]=React.useState('');
  const [fuelOdometer,setFuelOdometer]=React.useState('');
  const [fuelFullTank,setFuelFullTank]=React.useState(true);
  const [maintenanceName,setMaintenanceName]=React.useState('');
  const [maintenanceDate,setMaintenanceDate]=React.useState('');
  const speedAlertRef=React.useRef(false);
- React.useEffect(()=>{localStorage.setItem('smartoffice-bike-list',JSON.stringify(motorcycles))},[motorcycles]);
- React.useEffect(()=>{localStorage.setItem('smartoffice-bike-selected',selectedBikeId)},[selectedBikeId]);
- React.useEffect(()=>{localStorage.setItem('smartoffice-bike-fuel-logs',JSON.stringify(fuelLogs))},[fuelLogs]);
- React.useEffect(()=>{localStorage.setItem('smartoffice-bike-maintenance',JSON.stringify(maintenance))},[maintenance]);
- React.useEffect(()=>{localStorage.setItem('smartoffice-bike-speed-limit',String(speedLimit))},[speedLimit]);
+ React.useEffect(()=>{if(!nativeDataReady)return;localStorage.setItem('smartoffice-bike-list',JSON.stringify(motorcycles));localStorage.setItem('smartoffice-bike-selected',selectedBikeId);localStorage.setItem('smartoffice-bike-fuel-logs',JSON.stringify(fuelLogs));localStorage.setItem('smartoffice-bike-maintenance',JSON.stringify(maintenance));localStorage.setItem('smartoffice-bike-speed-limit',String(speedLimit));localStorage.setItem('smartoffice-bike-fuel-price',String(fuelPrice));localStorage.setItem('smartoffice-bike-rides',JSON.stringify(rides));localStorage.setItem('smartoffice-bike-active',JSON.stringify(activeRide));if(Capacitor.isNativePlatform()){clearTimeout(nativeSaveTimer.current);nativeSaveTimer.current=setTimeout(()=>{const payload={version:2,savedAt:new Date().toISOString(),rides,activeRide,motorcycles,selectedBikeId,fuelLogs,maintenance,fuelPrice,speedLimit};BikeTracking.saveBikeData({dataJson:JSON.stringify(payload)}).catch(()=>{})},250)}},[nativeDataReady,rides,activeRide,motorcycles,selectedBikeId,fuelLogs,maintenance,fuelPrice,speedLimit]);
 
  const watchRef=React.useRef(null),activeRef=React.useRef(activeRide),stillRef=React.useRef(0),movingRef=React.useRef(0),lastFixRef=React.useRef(null);const finishingRef=React.useRef(false);
- React.useEffect(()=>{activeRef.current=activeRide;localStorage.setItem('smartoffice-bike-active',JSON.stringify(activeRide))},[activeRide]);
- React.useEffect(()=>{localStorage.setItem('smartoffice-bike-rides',JSON.stringify(rides))},[rides]);
- React.useEffect(()=>{localStorage.setItem('smartoffice-bike-fuel-price',String(fuelPrice))},[fuelPrice]);
+ React.useEffect(()=>{activeRef.current=activeRide},[activeRide]);
  const haversine=(a,b)=>{const rad=n=>n*Math.PI/180,R=6371000,dLat=rad(b.lat-a.lat),dLon=rad(b.lng-a.lng),x=Math.sin(dLat/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(x))};
  const beginRide=(mode='manual',point=null)=>{
   if(activeRef.current)return;
