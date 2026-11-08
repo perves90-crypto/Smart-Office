@@ -247,6 +247,9 @@ jobs:
           test -n "$ANDROID_KEY_ALIAS"
           test -n "$ANDROID_KEY_PASSWORD"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/smart-office-release.jks
+          echo "Validating release keystore and alias..."
+          keytool -list -keystore android/app/smart-office-release.jks -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" >/dev/null
+          echo "Keystore and alias validation passed."
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -261,7 +264,7 @@ jobs:
                       storeFile file("smart-office-release.jks")
                       storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
                       keyAlias System.getenv("ANDROID_KEY_ALIAS")
-                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+                      keyPassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
                   }
               }
 
