@@ -101,6 +101,17 @@ jobs:
                 JSObject result=new JSObject();result.put("uri",uri.toString());result.put("fileName",name);call.resolve(result);
               } catch(Exception e) { call.reject("Report export failed: "+e.getMessage(),e); }
             }
+            @PluginMethod public void saveBikeData(PluginCall call) {
+              try {
+                String data=call.getString("dataJson","");
+                getContext().getSharedPreferences("bike_tracker_data_v2",0).edit().putString("payload",data).apply();
+                call.resolve();
+              } catch(Exception e) { call.reject("Bike data save failed: "+e.getMessage(),e); }
+            }
+            @PluginMethod public void getBikeData(PluginCall call) {
+              String data=getContext().getSharedPreferences("bike_tracker_data_v2",0).getString("payload","null");
+              JSObject out=new JSObject();out.put("dataJson",data);call.resolve(out);
+            }
             @PluginMethod public void getTrackData(PluginCall call) {
               android.content.SharedPreferences p=getContext().getSharedPreferences("bike_native_track",0);
               JSObject out=new JSObject();
