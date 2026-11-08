@@ -328,3 +328,5 @@ jobs:
           retention-days: 90
 
 # Re-run Android release build after signing-secret refresh.
+
+# Trigger release build after refreshing keystore secret.
