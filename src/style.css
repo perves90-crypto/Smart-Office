@@ -140,3 +140,8 @@
 .bikeHistoryFilters button{border:1px solid #dce5f1;background:#fff;color:#6c7d93;border-radius:18px;padding:7px 11px;font-size:9px;font-weight:800}
 .bikeHistoryFilters button.active{background:linear-gradient(145deg,#397fe2,#2452a4);border-color:#2c64b4;color:#fff;box-shadow:0 3px 7px #2452a433}
 .bikeHistoryFilters span{margin-left:auto;color:#8291a6;font-size:9px;font-weight:700}
+
+.bikeDateRange{display:flex;align-items:end;gap:8px;padding:10px;margin:-2px 0 12px;background:#f4f8ff;border:1px solid #dce8f8;border-radius:12px}
+.bikeDateRange label{display:flex;flex:1;min-width:0;flex-direction:column;gap:5px;color:#718096;font-size:9px;font-weight:800}
+.bikeDateRange input{width:100%;min-width:0;box-sizing:border-box;border:1px solid #d7e1ef;border-radius:8px;background:#fff;padding:8px 5px;color:#31445f;font-size:10px}
+.bikeDateRange button{border:0;border-radius:8px;background:#e4edfa;color:#315f9e;padding:9px 10px;font-size:9px;font-weight:800}
