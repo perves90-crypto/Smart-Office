@@ -1139,6 +1139,21 @@ function BikeTracker({onBack}){
  const [reportFrom,setReportFrom]=React.useState('');
  const [reportTo,setReportTo]=React.useState('');
  const [fuelPrice,setFuelPrice]=React.useState(()=>Number(localStorage.getItem('smartoffice-bike-fuel-price')||120));
+ const [motorcycles,setMotorcycles]=React.useState(()=>{try{const x=JSON.parse(localStorage.getItem('smartoffice-bike-list')||'[]');return x.length?x:[{id:'bike-default',name:'My Motorcycle'}]}catch{return[{id:'bike-default',name:'My Motorcycle'}]}});
+ const [selectedBikeId,setSelectedBikeId]=React.useState(()=>localStorage.getItem('smartoffice-bike-selected')||'bike-default');
+ const [fuelLogs,setFuelLogs]=React.useState(()=>{try{return JSON.parse(localStorage.getItem('smartoffice-bike-fuel-logs')||'[]')}catch{return[]}});
+ const [maintenance,setMaintenance]=React.useState(()=>{try{return JSON.parse(localStorage.getItem('smartoffice-bike-maintenance')||'[]')}catch{return[]}});
+ const [speedLimit,setSpeedLimit]=React.useState(()=>Number(localStorage.getItem('smartoffice-bike-speed-limit')||80));
+ const [fuelLitres,setFuelLitres]=React.useState('');
+ const [maintenanceName,setMaintenanceName]=React.useState('');
+ const [maintenanceDate,setMaintenanceDate]=React.useState('');
+ const speedAlertRef=React.useRef(false);
+ React.useEffect(()=>{localStorage.setItem('smartoffice-bike-list',JSON.stringify(motorcycles))},[motorcycles]);
+ React.useEffect(()=>{localStorage.setItem('smartoffice-bike-selected',selectedBikeId)},[selectedBikeId]);
+ React.useEffect(()=>{localStorage.setItem('smartoffice-bike-fuel-logs',JSON.stringify(fuelLogs))},[fuelLogs]);
+ React.useEffect(()=>{localStorage.setItem('smartoffice-bike-maintenance',JSON.stringify(maintenance))},[maintenance]);
+ React.useEffect(()=>{localStorage.setItem('smartoffice-bike-speed-limit',String(speedLimit))},[speedLimit]);
+
  const watchRef=React.useRef(null),activeRef=React.useRef(activeRide),stillRef=React.useRef(0),movingRef=React.useRef(0),lastFixRef=React.useRef(null);
  React.useEffect(()=>{activeRef.current=activeRide;localStorage.setItem('smartoffice-bike-active',JSON.stringify(activeRide))},[activeRide]);
  React.useEffect(()=>{localStorage.setItem('smartoffice-bike-rides',JSON.stringify(rides))},[rides]);
@@ -1147,7 +1162,7 @@ function BikeTracker({onBack}){
  const beginRide=(mode='manual',point=null)=>{
   if(activeRef.current)return;
   const now=Date.now(),p=point?{lat:point.coords.latitude,lng:point.coords.longitude,at:now,speed:Math.max(0,point.coords.speed||0)}:null;
-  const ride={id:'ride-'+now,startAt:new Date(now).toISOString(),endAt:null,distanceM:0,seconds:0,maxSpeed:0,points:p?[p]:[],mode};
+  const ride={id:'ride-'+now,bikeId:selectedBikeId,startAt:new Date(now).toISOString(),endAt:null,distanceM:0,seconds:0,maxSpeed:0,points:p?[p]:[],mode};
   activeRef.current=ride;setActiveRide(ride);setDistance(0);setElapsed(0);setGpsError('');
   if(Capacitor.isNativePlatform())BikeTracking.startTracking().catch(()=>setGpsError('Native background tracking could not start. Check location permission.'));
  };
@@ -1174,6 +1189,7 @@ function BikeTracker({onBack}){
     if(seconds>0&&seconds<30){const metres=haversine(previousFix,{lat:pos.coords.latitude,lng:pos.coords.longitude});kmh=metres/seconds*3.6}
    }
    setSpeed(kmh);
+   if(kmh>speedLimit&&!speedAlertRef.current){speedAlertRef.current=true;setGpsError('Speed alert: '+Math.round(kmh)+' km/h — limit '+speedLimit+' km/h');if(navigator.vibrate)navigator.vibrate([250,120,250]);}else if(kmh<speedLimit-5)speedAlertRef.current=false;
    const point={lat:pos.coords.latitude,lng:pos.coords.longitude,at:stamp,speed:kmh,accuracy};
    lastFixRef.current=point;
    let current=activeRef.current;
@@ -1218,6 +1234,13 @@ function BikeTracker({onBack}){
  const deleteRide=ride=>{if(!window.confirm('এই রাইডের তথ্য স্থায়ীভাবে মুছে ফেলবেন?'))return;setRides(old=>old.filter(item=>item.id!==ride.id));if(expandedRide===ride.id)setExpandedRide(null)};
  const exportCsv=()=>{const rows=[['Date','Start','End','Distance KM','Duration seconds','Max speed KMH','Tracking mode','Google Maps URL'],...filteredRides.map(r=>[new Date(r.startAt).toLocaleDateString(),new Date(r.startAt).toLocaleTimeString(),r.endAt?new Date(r.endAt).toLocaleTimeString():'',fmtDistance(r.distanceM||0),r.seconds||0,r.maxSpeed||0,r.mode,mapUrl(r)])];const csv=rows.map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');const a=document.createElement('a'),url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.href=url;a.download='Bike-Tracker-Ride-History.csv';a.click();URL.revokeObjectURL(url)};
  const exportReportCsv=()=>{const rows=[['Report From',reportFrom||'All time'],['Report To',reportTo||'All time'],['Total Rides',reportCount],['Total Distance KM',(reportDistanceM/1000).toFixed(2)],['Total Ride Time Seconds',reportSeconds],['Average Speed KMH',reportAvgSpeed.toFixed(1)],['Top Speed KMH',Math.round(reportMaxSpeed)],[],['Date','Start','End','Distance KM','Duration seconds','Max speed KMH','Tracking mode','Google Maps URL'],...reportRides.map(r=>[new Date(r.startAt).toLocaleDateString(),new Date(r.startAt).toLocaleTimeString(),r.endAt?new Date(r.endAt).toLocaleTimeString():'',fmtDistance(r.distanceM||0),r.seconds||0,r.maxSpeed||0,r.mode,mapUrl(r)])];const csv=rows.map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');const a=document.createElement('a'),url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.href=url;a.download='Bike-Tracker-Report-'+(reportFrom||'start')+'-to-'+(reportTo||'latest')+'.csv';a.click();URL.revokeObjectURL(url)};
+
+ const addFuelLog=()=>{const litres=Number(fuelLitres);if(!litres||litres<=0)return;setFuelLogs(old=>[{id:'fuel-'+Date.now(),bikeId:selectedBikeId,date:new Date().toISOString(),litres,cost:litres*fuelPrice},...old]);setFuelLitres('')};
+ const addMaintenance=()=>{if(!maintenanceName.trim()||!maintenanceDate)return;setMaintenance(old=>[{id:'maint-'+Date.now(),bikeId:selectedBikeId,name:maintenanceName.trim(),dueDate:maintenanceDate,done:false},...old]);setMaintenanceName('');setMaintenanceDate('')};
+ const backupData=()=>{const payload={version:1,createdAt:new Date().toISOString(),rides,motorcycles,fuelLogs,maintenance,fuelPrice,speedLimit};const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='Smart-Office-Bike-Backup-'+today+'.json';a.click();URL.revokeObjectURL(url)};
+ const restoreData=e=>{const file=e.target.files&&e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const d=JSON.parse(reader.result);if(!Array.isArray(d.rides)||!Array.isArray(d.motorcycles))throw new Error('Invalid');setRides(d.rides);setMotorcycles(d.motorcycles);setFuelLogs(Array.isArray(d.fuelLogs)?d.fuelLogs:[]);setMaintenance(Array.isArray(d.maintenance)?d.maintenance:[]);if(d.fuelPrice)setFuelPrice(d.fuelPrice);if(d.speedLimit)setSpeedLimit(d.speedLimit);alert('Backup restored successfully.')}catch(err){alert('Invalid backup file.')}};reader.readAsText(file);e.target.value=''};
+ const addMotorcycle=()=>{const name=window.prompt('Motorcycle name / model?');if(!name||!name.trim())return;const bike={id:'bike-'+Date.now(),name:name.trim()};setMotorcycles(old=>[...old,bike]);setSelectedBikeId(bike.id)};
+ const reportGraphMax=Math.max(1,...reportDailyGroups.map(x=>x.distanceM));
  const monthly=rides.filter(r=>new Date(r.startAt).getMonth()===new Date().getMonth()&&new Date(r.startAt).getFullYear()===new Date().getFullYear()).reduce((s,r)=>s+(r.distanceM||0),0)/1000;
  return <div className="bikeApp">
   <header className="bikeHeader"><button className="bikeBack" onClick={onBack}>‹</button><div className="bikeBrand"><span className="bikeBrandIcon"><Bike size={23}/></span><span><b>Bike Tracker</b><small>Smart Office • Motorcycle</small></span></div><span className={'gpsBadge '+(gpsStatus==='GPS connected'?'gpsOn':'')}><span/>{gpsStatus}</span></header>
