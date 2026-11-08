@@ -105,11 +105,44 @@ jobs:
               try {
                 String data=call.getString("dataJson","");
                 getContext().getSharedPreferences("bike_tracker_data_v2",0).edit().putString("payload",data).apply();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                  android.content.ContentResolver resolver=getContext().getContentResolver();
+                  android.net.Uri collection=android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+                  String name="BikeTracker-Backup.json", path=android.os.Environment.DIRECTORY_DOWNLOADS+"/Smart Office/";
+                  android.database.Cursor cursor=resolver.query(collection,new String[]{android.provider.MediaStore.Downloads._ID},
+                    android.provider.MediaStore.Downloads.DISPLAY_NAME+"=? AND "+android.provider.MediaStore.Downloads.RELATIVE_PATH+"=?",
+                    new String[]{name,path},null);
+                  android.net.Uri fileUri=null;
+                  if(cursor!=null){try{if(cursor.moveToFirst())fileUri=android.content.ContentUris.withAppendedId(collection,cursor.getLong(0));}finally{cursor.close();}}
+                  if(fileUri==null){android.content.ContentValues values=new android.content.ContentValues();values.put(android.provider.MediaStore.Downloads.DISPLAY_NAME,name);values.put(android.provider.MediaStore.Downloads.MIME_TYPE,"application/json");values.put(android.provider.MediaStore.Downloads.RELATIVE_PATH,path);fileUri=resolver.insert(collection,values);}
+                  if(fileUri==null)throw new java.io.IOException("Cannot create shared backup file");
+                  try(java.io.OutputStream stream=resolver.openOutputStream(fileUri,"wt")){if(stream==null)throw new java.io.IOException("Cannot write shared backup file");stream.write(data.getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+                } else {
+                  java.io.File dir=new java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),"Smart Office");
+                  if(!dir.exists())dir.mkdirs();
+                  try(java.io.FileOutputStream stream=new java.io.FileOutputStream(new java.io.File(dir,"BikeTracker-Backup.json"))){stream.write(data.getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+                }
                 call.resolve();
-              } catch(Exception e) { call.reject("Bike data save failed: "+e.getMessage(),e); }
+              } catch(Exception e) { call.reject("Bike data backup failed: "+e.getMessage(),e); }
             }
             @PluginMethod public void getBikeData(PluginCall call) {
               String data=getContext().getSharedPreferences("bike_tracker_data_v2",0).getString("payload","null");
+              if("null".equals(data) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                android.database.Cursor cursor=null;
+                try {
+                  cursor=getContext().getContentResolver().query(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    new String[]{android.provider.MediaStore.Downloads._ID},
+                    android.provider.MediaStore.Downloads.DISPLAY_NAME+"=? AND "+android.provider.MediaStore.Downloads.RELATIVE_PATH+"=?",
+                    new String[]{"BikeTracker-Backup.json",android.os.Environment.DIRECTORY_DOWNLOADS+"/Smart Office/"},null);
+                  if(cursor!=null && cursor.moveToFirst()) {
+                    android.net.Uri uri=android.content.ContentUris.withAppendedId(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,cursor.getLong(0));
+                    try(java.io.InputStream in=getContext().getContentResolver().openInputStream(uri);java.io.ByteArrayOutputStream outBytes=new java.io.ByteArrayOutputStream()){
+                      if(in!=null){byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1)outBytes.write(buffer,0,n);data=outBytes.toString("UTF-8");}
+                    }
+                  }
+                } catch(Exception ignored){} finally {if(cursor!=null)cursor.close();}
+                if(!"null".equals(data))getContext().getSharedPreferences("bike_tracker_data_v2",0).edit().putString("payload",data).apply();
+              }
               JSObject out=new JSObject();out.put("dataJson",data);call.resolve(out);
             }
             @PluginMethod public void getTrackData(PluginCall call) {
