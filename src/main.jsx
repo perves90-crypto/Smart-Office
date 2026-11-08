@@ -1,4 +1,6 @@
 import React from 'react';
+import {registerPlugin,Capacitor} from '@capacitor/core';
+const BikeTracking=registerPlugin('BikeTracking');
 import * as XLSX from 'xlsx';
 import {createRoot} from 'react-dom/client';
 import {FileText,Table2,Presentation,File,FolderOpen,Clock3,Settings,ShieldCheck,Grid2X2,Home,Folder,Eye,Plus,Database,ClipboardCheck,Save,Printer,Undo2,Redo2,Copy,Scissors,Clipboard,Paintbrush,Type,Bold,Italic,Underline,AlignLeft,AlignCenter,AlignRight,WrapText,Merge,Filter,ArrowDownUp,Search,Check,MessageSquare,Lock,BarChart3,Image,Link,Calculator,Percent,Coins,CalendarDays,SortAsc,FileSpreadsheet,X,ChevronDown,Bike,MapPin,Gauge,Timer,Fuel,Route,Download,Play,Square,Navigation,TrendingUp,Trash2} from 'lucide-react';
@@ -1147,10 +1149,13 @@ function BikeTracker({onBack}){
   const now=Date.now(),p=point?{lat:point.coords.latitude,lng:point.coords.longitude,at:now,speed:Math.max(0,point.coords.speed||0)}:null;
   const ride={id:'ride-'+now,startAt:new Date(now).toISOString(),endAt:null,distanceM:0,seconds:0,maxSpeed:0,points:p?[p]:[],mode};
   activeRef.current=ride;setActiveRide(ride);setDistance(0);setElapsed(0);setGpsError('');
+  if(Capacitor.isNativePlatform())BikeTracking.startTracking().catch(()=>setGpsError('Native background tracking could not start. Check location permission.'));
  };
- const finishRide=()=>{
+ const finishRide=async()=>{
   const ride=activeRef.current;if(!ride)return;
-  const finished={...ride,endAt:new Date().toISOString(),seconds:Math.max(ride.seconds,Math.floor((Date.now()-Date.parse(ride.startAt))/1000))};
+  let native={};if(Capacitor.isNativePlatform()){try{await BikeTracking.stopTracking();native=await BikeTracking.getTrackData();}catch(e){}}
+  let nativePoints=[];try{nativePoints=JSON.parse(native.pointsJson||'[]')}catch(e){}
+  const finished={...ride,points:nativePoints.length?nativePoints:ride.points,distanceM:native.distanceM>0?native.distanceM:ride.distanceM,maxSpeed:Math.max(ride.maxSpeed||0,native.maxSpeed||0),endAt:new Date().toISOString(),seconds:Math.max(ride.seconds,Math.floor((Date.now()-Date.parse(ride.startAt))/1000))};
   if(finished.points.length>1||finished.distanceM>20){setRides(old=>[finished,...old].slice(0,2000))}
   activeRef.current=null;setActiveRide(null);setSpeed(0);setDistance(0);setElapsed(0);stillRef.current=0;movingRef.current=0;
  };
@@ -1187,6 +1192,8 @@ function BikeTracker({onBack}){
   return()=>{if(watchRef.current!==null)navigator.geolocation.clearWatch(watchRef.current)};
  },[autoMode]);
  React.useEffect(()=>{if(!activeRide)return;const tick=()=>{setElapsed(Math.floor((Date.now()-Date.parse(activeRide.startAt))/1000));setDistance(activeRef.current?.distanceM||0)};tick();const id=setInterval(tick,1000);return()=>clearInterval(id)},[!!activeRide]);
+ React.useEffect(()=>{if(!Capacitor.isNativePlatform())return;let alive=true;const syncNative=async()=>{if(!activeRef.current)return;try{const data=await BikeTracking.getTrackData();if(!alive||!data.tracking)return;const points=JSON.parse(data.pointsJson||'[]');if(points.length){const current=activeRef.current;if(current){const merged={...current,points,distanceM:Math.max(current.distanceM||0,data.distanceM||0),maxSpeed:Math.max(current.maxSpeed||0,data.maxSpeed||0)};activeRef.current=merged;setActiveRide(merged);setDistance(merged.distanceM)}}}catch(e){}};syncNative();const id=setInterval(syncNative,5000);return()=>{alive=false;clearInterval(id)}},[]);
+
  const fmtTime=s=>{const h=Math.floor(s/3600),m=Math.floor(s%3600/60),sec=s%60;return [h,m,sec].map(n=>String(n).padStart(2,'0')).join(':')};
  const fmtDistance=m=>(m/1000).toFixed(2);
  const today=new Date().toLocaleDateString('en-CA');
