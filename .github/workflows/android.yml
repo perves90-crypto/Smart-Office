@@ -73,6 +73,34 @@ jobs:
               catch(Exception e){Intent i=new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);getContext().startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
               call.resolve();
             }
+            @PluginMethod public void saveReportFile(PluginCall call) {
+              try {
+                String name=call.getString("fileName","Smart-Office-Report.bin");
+                String mime=call.getString("mimeType","application/octet-stream");
+                String encoded=call.getString("data","");
+                byte[] bytes=android.util.Base64.decode(encoded,android.util.Base64.DEFAULT);
+                android.net.Uri uri;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                  android.content.ContentValues values=new android.content.ContentValues();
+                  values.put(android.provider.MediaStore.Downloads.DISPLAY_NAME,name);
+                  values.put(android.provider.MediaStore.Downloads.MIME_TYPE,mime);
+                  values.put(android.provider.MediaStore.Downloads.RELATIVE_PATH,android.os.Environment.DIRECTORY_DOWNLOADS+"/Smart Office");
+                  values.put(android.provider.MediaStore.Downloads.IS_PENDING,1);
+                  uri=getContext().getContentResolver().insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);
+                  if(uri==null)throw new java.io.IOException("Could not create Downloads file");
+                  try(java.io.OutputStream stream=getContext().getContentResolver().openOutputStream(uri)){stream.write(bytes);}
+                  values.clear();values.put(android.provider.MediaStore.Downloads.IS_PENDING,0);
+                  getContext().getContentResolver().update(uri,values,null,null);
+                } else {
+                  java.io.File dir=new java.io.File(getContext().getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS),"Smart Office");
+                  if(!dir.exists()&&!dir.mkdirs())throw new java.io.IOException("Could not create export folder");
+                  java.io.File file=new java.io.File(dir,name);
+                  try(java.io.FileOutputStream stream=new java.io.FileOutputStream(file)){stream.write(bytes);}
+                  uri=android.net.Uri.fromFile(file);
+                }
+                JSObject result=new JSObject();result.put("uri",uri.toString());result.put("fileName",name);call.resolve(result);
+              } catch(Exception e) { call.reject("Report export failed: "+e.getMessage(),e); }
+            }
             @PluginMethod public void getTrackData(PluginCall call) {
               android.content.SharedPreferences p=getContext().getSharedPreferences("bike_native_track",0);
               JSObject out=new JSObject();
