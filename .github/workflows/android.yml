@@ -234,7 +234,61 @@ jobs:
           test -s gradle-8.11.1-all.zip
           unzip -q gradle-8.11.1-all.zip
           "$HOME/gradle-dist/gradle-8.11.1/bin/gradle" --version
-      - name: Build debug APK
+      - name: Configure permanent release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -e
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/smart-office-release.jks
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("android/app/build.gradle")
+          s = p.read_text()
+          if "signingConfigs" not in s:
+              pos = s.find("    buildTypes {")
+              if pos < 0:
+                  raise SystemExit("Could not locate Android buildTypes block")
+              signing = """    signingConfigs {
+                  release {
+                      storeFile file("smart-office-release.jks")
+                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+                  }
+              }
+
+          """
+              s = s[:pos] + signing + s[pos:]
+          match = re.search(r"(?m)^\\s*release\\s*\\{", s)
+          if not match:
+              raise SystemExit("Could not locate release buildType")
+          start = s.find("{", match.start())
+          depth = 0
+          end = None
+          for j in range(start, len(s)):
+              if s[j] == "{":
+                  depth += 1
+              elif s[j] == "}":
+                  depth -= 1
+                  if depth == 0:
+                      end = j
+                      break
+          if end is None:
+              raise SystemExit("Unbalanced release buildType braces")
+          block = s[start:end]
+          if "signingConfig" not in block:
+              s = s[:end] + "\\n            signingConfig signingConfigs.release\\n        " + s[end:]
+          p.write_text(s)
+          PY
+      - name: Build signed release APK
         run: |
           cd android
           cat > /tmp/kotlin-fix.gradle <<'EOF'
@@ -245,9 +299,9 @@ jobs:
             }
           }
           EOF
-          "$HOME/gradle-dist/gradle-8.11.1/bin/gradle" --no-daemon -I /tmp/kotlin-fix.gradle assembleDebug
+          "$HOME/gradle-dist/gradle-8.11.1/bin/gradle" --no-daemon -I /tmp/kotlin-fix.gradle assembleRelease
       - uses: actions/upload-artifact@v4
         with:
-          name: Smart-Office-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: Smart-Office-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 90
