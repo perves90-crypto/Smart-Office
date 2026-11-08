@@ -1120,8 +1120,14 @@ function CalculatorEditor({onBack}){
  </div>
 }
 
+function SmartOfficeSplash(){
+ React.useEffect(()=>{const timer=window.setTimeout(()=>{const node=document.getElementById('smart-office-splash');if(node){node.classList.add('splashExit');window.setTimeout(()=>node.remove(),220)}} ,2000);return()=>window.clearTimeout(timer)},[]);
+ const streams=Array.from({length:22},(_,i)=>({id:i,left:(i*47)%100,delay:-((i*137)%2000)/1000,duration:1.5+((i*29)%18)/10,text:Array.from({length:12},(_,j)=>((i+j*7)%2?'1':'0')).join('')}));
+ return <div id="smart-office-splash" className="smartSplash" aria-label="Smart Office loading"><div className="matrixRain">{streams.map(s=><div key={s.id} className="matrixStream" style={{left:s.left+'%',animationDelay:s.delay+'s',animationDuration:s.duration+'s'}}>{s.text.split('').map((ch,i)=><span key={i}>{ch}</span>)}</div>)}</div><div className="binaryTunnel">{Array.from({length:28},(_,i)=><span key={i} style={{'--i':i}}>{i%2?'010101':'101010'}</span>)}</div><div className="splashGlow"></div><div className="splashLogoStage"><div className="splashLogo"><img src="/smart-office-logo-1.png" alt="Smart Office logo"/></div></div><div className="splashCaption">SMART OFFICE</div></div>
+}
 function App(){
  const [tab,setTab]=React.useState('Home');
+ const [showSplash,setShowSplash]=React.useState(true);
  const [excel,setExcel]=React.useState(false);
  const [calculator,setCalculator]=React.useState(false);
  const [officeFile,setOfficeFile]=React.useState(null);
@@ -1134,6 +1140,8 @@ function App(){
   setRecentFiles(list);
  };
  React.useEffect(()=>{refreshRecent()},[]);
+ React.useEffect(()=>{const timer=window.setTimeout(()=>setShowSplash(false),2000);return()=>window.clearTimeout(timer)},[]);
+ if(showSplash)return <SmartOfficeSplash/>;
  if(calculator)return <CalculatorEditor onBack={()=>setCalculator(false)}/>;
  if(excel)return <ExcelEditor onBack={()=>{setExcel(false);refreshRecent()}}/>;
  if(officeFile?.type==='Word')return <WordEditor file={officeFile} onBack={()=>{setOfficeFile(null);refreshRecent()}}/>;
