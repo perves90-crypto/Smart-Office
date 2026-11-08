@@ -267,13 +267,17 @@ jobs:
 
           """
               s = s[:pos] + signing + s[pos:]
-          match = re.search(r"(?m)^\s*release\s*\{", s)
+          bt = s.find("buildTypes {")
+          if bt < 0:
+              raise SystemExit("Could not locate buildTypes block")
+          match = re.search(r"(?m)^\\s*release\\s*\\{", s[bt:])
           if not match:
               raise SystemExit("Could not locate release buildType")
-          start = s.find("{", match.start())
+          start = bt + match.start()
+          brace = s.find("{", start)
           depth = 0
           end = None
-          for j in range(start, len(s)):
+          for j in range(brace, len(s)):
               if s[j] == "{":
                   depth += 1
               elif s[j] == "}":
@@ -283,12 +287,16 @@ jobs:
                       break
           if end is None:
               raise SystemExit("Unbalanced release buildType braces")
-          block = s[start:end]
+          block = s[brace:end]
           if "signingConfig" not in block:
-              s = s[:end] + "\n            signingConfig signingConfigs.release\n        " + s[end:]
+              s = s[:end] + "\\n            signingConfig signingConfigs.release\\n        " + s[end:]
           p.write_text(s)
           PY
       - name: Build signed release APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           cd android
           cat > /tmp/kotlin-fix.gradle <<'EOF'
