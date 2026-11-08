@@ -307,6 +307,10 @@ jobs:
             }
           }
           EOF
+          mkdir -p "$HOME/.config/.android"
+          if [ ! -f "$HOME/.config/.android/debug.keystore" ]; then
+            keytool -genkeypair -v -keystore "$HOME/.config/.android/debug.keystore" -storepass android -alias AndroidDebugKey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
           echo "=== Android debug signing certificate SHA-1 (for Google Android OAuth client) ==="
           "$HOME/gradle-dist/gradle-8.11.1/bin/gradle" --no-daemon -I /tmp/kotlin-fix.gradle signingReport
           echo "=== Building debug APK ==="
