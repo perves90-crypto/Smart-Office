@@ -64,6 +64,15 @@ jobs:
               Intent i = new Intent(getContext(), BikeLocationService.class); i.setAction(BikeLocationService.ACTION_STOP);
               getContext().startService(i); call.resolve();
             }
+            @PluginMethod public void openLocationSettings(PluginCall call) {
+              Intent i=new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:"+getContext().getPackageName()));
+              getContext().startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); call.resolve();
+            }
+            @PluginMethod public void openBatterySettings(PluginCall call) {
+              try { Intent i=new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,android.net.Uri.parse("package:"+getContext().getPackageName()));getContext().startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
+              catch(Exception e){Intent i=new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);getContext().startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
+              call.resolve();
+            }
             @PluginMethod public void getTrackData(PluginCall call) {
               android.content.SharedPreferences p=getContext().getSharedPreferences("bike_native_track",0);
               JSObject out=new JSObject();
