@@ -33,6 +33,109 @@ jobs:
           curl -L "https://raw.githubusercontent.com/perves90-crypto/Smart-Office/main/smart-office-logo-1.png" -o assets/icon.png
           npx capacitor-assets generate --android
           npx cap sync android
+      - name: Add native background motorcycle tracking
+        run: |
+          mkdir -p android/app/src/main/java/com/smartoffice/app
+          cat > android/app/src/main/java/com/smartoffice/app/MainActivity.java <<'EOF'
+          package com.smartoffice.app;
+          import com.getcapacitor.BridgeActivity;
+          public class MainActivity extends BridgeActivity {
+            @Override public void onCreate(android.os.Bundle savedInstanceState) {
+              registerPlugin(BikeTrackingPlugin.class);
+              super.onCreate(savedInstanceState);
+            }
+          }
+          EOF
+          cat > android/app/src/main/java/com/smartoffice/app/BikeTrackingPlugin.java <<'EOF'
+          package com.smartoffice.app;
+          import android.content.Intent;
+          import android.os.Build;
+          import com.getcapacitor.*;
+          import com.getcapacitor.annotation.CapacitorPlugin;
+          @CapacitorPlugin(name = "BikeTracking")
+          public class BikeTrackingPlugin extends Plugin {
+            @PluginMethod public void startTracking(PluginCall call) {
+              Intent i = new Intent(getContext(), BikeLocationService.class);
+              i.setAction(BikeLocationService.ACTION_START);
+              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) getContext().startForegroundService(i); else getContext().startService(i);
+              call.resolve();
+            }
+            @PluginMethod public void stopTracking(PluginCall call) {
+              Intent i = new Intent(getContext(), BikeLocationService.class); i.setAction(BikeLocationService.ACTION_STOP);
+              getContext().startService(i); call.resolve();
+            }
+            @PluginMethod public void getTrackData(PluginCall call) {
+              android.content.SharedPreferences p=getContext().getSharedPreferences("bike_native_track",0);
+              JSObject out=new JSObject();
+              out.put("pointsJson",p.getString("points","[]"));
+              out.put("distanceM",p.getFloat("distanceM",0));
+              out.put("maxSpeed",p.getFloat("maxSpeed",0));
+              out.put("startedAt",p.getLong("startedAt",0));
+              out.put("tracking",p.getBoolean("tracking",false));
+              call.resolve(out);
+            }
+          }
+          EOF
+          cat > android/app/src/main/java/com/smartoffice/app/BikeLocationService.java <<'EOF'
+          package com.smartoffice.app;
+          import android.app.*;
+          import android.content.*;
+          import android.location.*;
+          import android.os.*;
+          import org.json.*;
+          public class BikeLocationService extends Service {
+            public static final String ACTION_START="com.smartoffice.app.BIKE_START", ACTION_STOP="com.smartoffice.app.BIKE_STOP";
+            private LocationManager manager; private LocationListener listener;
+            private static final String PREF="bike_native_track", CHANNEL="bike_tracking_channel";
+            @Override public void onCreate(){super.onCreate();manager=(LocationManager)getSystemService(LOCATION_SERVICE);}
+            private void notification(){
+              if(Build.VERSION.SDK_INT>=26){NotificationChannel ch=new NotificationChannel(CHANNEL,"Motorcycle ride tracking",NotificationManager.IMPORTANCE_LOW);((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(ch);}
+              Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
+              b.setContentTitle("Smart Office Bike Tracker").setContentText("GPS ride tracking is active").setSmallIcon(android.R.drawable.ic_menu_mylocation).setOngoing(true);
+              startForeground(7101,b.build());
+            }
+            @Override public int onStartCommand(Intent intent,int flags,int startId){
+              String action=intent==null?ACTION_START:intent.getAction();
+              if(ACTION_STOP.equals(action)){stopTracking();stopForeground(true);stopSelf();return START_NOT_STICKY;}
+              notification();
+              getSharedPreferences(PREF,0).edit().putString("points","[]").putFloat("distanceM",0).putFloat("maxSpeed",0).putLong("startedAt",System.currentTimeMillis()).putBoolean("tracking",true).apply();
+              startGps(); return START_STICKY;
+            }
+            private void startGps(){
+              listener=new LocationListener(){public void onLocationChanged(Location l){savePoint(l);} public void onProviderEnabled(String p){} public void onProviderDisabled(String p){} public void onStatusChanged(String p,int s,Bundle e){}};
+              try{if(checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)==android.content.pm.PackageManager.PERMISSION_GRANTED)manager.requestLocationUpdates(LocationManager.GPS_PROVIDER,1000,2,listener);}catch(Exception ignored){}
+            }
+            private void savePoint(Location l){
+              android.content.SharedPreferences p=getSharedPreferences(PREF,0);try{
+                JSONArray a=new JSONArray(p.getString("points","[]"));
+                JSONObject point=new JSONObject();point.put("lat",l.getLatitude());point.put("lng",l.getLongitude());point.put("at",l.getTime());point.put("speed",l.hasSpeed()?l.getSpeed()*3.6:0);point.put("accuracy",l.hasAccuracy()?l.getAccuracy():999);
+                double distance=p.getFloat("distanceM",0);
+                if(a.length()>0){JSONObject prev=a.getJSONObject(a.length()-1);float[] result=new float[1];Location.distanceBetween(prev.getDouble("lat"),prev.getDouble("lng"),l.getLatitude(),l.getLongitude(),result);if(result[0]>=3&&result[0]<200&&l.getAccuracy()<=50)distance+=result[0];}
+                if(l.getAccuracy()<=50)a.put(point);
+                p.edit().putString("points",a.toString()).putFloat("distanceM",(float)distance).putFloat("maxSpeed",Math.max(p.getFloat("maxSpeed",0),l.hasSpeed()?l.getSpeed()*3.6f:0)).apply();
+              }catch(Exception ignored){}
+            }
+            private void stopTracking(){try{if(manager!=null&&listener!=null)manager.removeUpdates(listener);}catch(Exception ignored){}getSharedPreferences(PREF,0).edit().putBoolean("tracking",false).apply();}
+            @Override public void onDestroy(){stopTracking();super.onDestroy();}
+            @Override public android.os.IBinder onBind(Intent i){return null;}
+          }
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android/app/src/main/AndroidManifest.xml')
+          s=p.read_text()
+          perms='''    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+              <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+              <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+          '''
+          if 'ACCESS_BACKGROUND_LOCATION' not in s: s=s.replace('<application',perms+'    <application',1)
+          service='''        <service android:name=".BikeLocationService" android:enabled="true" android:exported="false" android:foregroundServiceType="location" />\n    '''
+          if 'BikeLocationService' not in s: s=s.replace('</application>',service+'</application>')
+          p.write_text(s)
+          PY
       - name: Use direct Gradle distribution mirror
         run: |
           echo 'networkTimeout=300000' >> android/gradle/wrapper/gradle-wrapper.properties
