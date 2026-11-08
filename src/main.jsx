@@ -1,7 +1,7 @@
 import React from 'react';
 import * as XLSX from 'xlsx';
 import {createRoot} from 'react-dom/client';
-import {FileText,Table2,Presentation,File,FolderOpen,Clock3,Settings,ShieldCheck,Grid2X2,Home,Folder,Eye,Plus,Database,ClipboardCheck,Save,Printer,Undo2,Redo2,Copy,Scissors,Clipboard,Paintbrush,Type,Bold,Italic,Underline,AlignLeft,AlignCenter,AlignRight,WrapText,Merge,Filter,ArrowDownUp,Search,Check,MessageSquare,Lock,BarChart3,Image,Link,Calculator,Percent,Coins,CalendarDays,SortAsc,FileSpreadsheet,X,ChevronDown} from 'lucide-react';
+import {FileText,Table2,Presentation,File,FolderOpen,Clock3,Settings,ShieldCheck,Grid2X2,Home,Folder,Eye,Plus,Database,ClipboardCheck,Save,Printer,Undo2,Redo2,Copy,Scissors,Clipboard,Paintbrush,Type,Bold,Italic,Underline,AlignLeft,AlignCenter,AlignRight,WrapText,Merge,Filter,ArrowDownUp,Search,Check,MessageSquare,Lock,BarChart3,Image,Link,Calculator,Percent,Coins,CalendarDays,SortAsc,FileSpreadsheet,X,ChevronDown,Bike,MapPin,Gauge,Timer,Fuel,Route,Download,Play,Square,Navigation,TrendingUp} from 'lucide-react';
 import './style.css';
 
 const ribbonData = {
@@ -1120,6 +1120,82 @@ function CalculatorEditor({onBack}){
  </div>
 }
 
+function BikeTracker({onBack}){
+ const [rides,setRides]=React.useState(()=>{try{return JSON.parse(localStorage.getItem('smartoffice-bike-rides')||'[]')}catch{return[]}});
+ const [activeRide,setActiveRide]=React.useState(()=>{try{return JSON.parse(localStorage.getItem('smartoffice-bike-active')||'null')}catch{return null}});
+ const [gpsStatus,setGpsStatus]=React.useState('GPS permission required');
+ const [gpsError,setGpsError]=React.useState('');
+ const [speed,setSpeed]=React.useState(0);
+ const [distance,setDistance]=React.useState(0);
+ const [elapsed,setElapsed]=React.useState(0);
+ const [autoMode,setAutoMode]=React.useState(true);
+ const [tab,setTab]=React.useState('ride');
+ const [fuelPrice,setFuelPrice]=React.useState(()=>Number(localStorage.getItem('smartoffice-bike-fuel-price')||120));
+ const watchRef=React.useRef(null),activeRef=React.useRef(activeRide),stillRef=React.useRef(0),movingRef=React.useRef(0);
+ React.useEffect(()=>{activeRef.current=activeRide;localStorage.setItem('smartoffice-bike-active',JSON.stringify(activeRide))},[activeRide]);
+ React.useEffect(()=>{localStorage.setItem('smartoffice-bike-rides',JSON.stringify(rides))},[rides]);
+ React.useEffect(()=>{localStorage.setItem('smartoffice-bike-fuel-price',String(fuelPrice))},[fuelPrice]);
+ const haversine=(a,b)=>{const rad=n=>n*Math.PI/180,R=6371000,dLat=rad(b.lat-a.lat),dLon=rad(b.lng-a.lng),x=Math.sin(dLat/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(x))};
+ const beginRide=(mode='manual',point=null)=>{
+  if(activeRef.current)return;
+  const now=Date.now(),p=point?{lat:point.coords.latitude,lng:point.coords.longitude,at:now,speed:Math.max(0,point.coords.speed||0)}:null;
+  const ride={id:'ride-'+now,startAt:new Date(now).toISOString(),endAt:null,distanceM:0,seconds:0,maxSpeed:0,points:p?[p]:[],mode};
+  activeRef.current=ride;setActiveRide(ride);setDistance(0);setElapsed(0);setGpsError('');
+ };
+ const finishRide=()=>{
+  const ride=activeRef.current;if(!ride)return;
+  const finished={...ride,endAt:new Date().toISOString(),seconds:Math.max(ride.seconds,Math.floor((Date.now()-Date.parse(ride.startAt))/1000))};
+  if(finished.points.length>1||finished.distanceM>20){setRides(old=>[finished,...old].slice(0,2000))}
+  activeRef.current=null;setActiveRide(null);setSpeed(0);setDistance(0);setElapsed(0);stillRef.current=0;movingRef.current=0;
+ };
+ React.useEffect(()=>{
+  if(!navigator.geolocation){setGpsStatus('GPS not supported');return}
+  setGpsStatus('Connecting GPS…');
+  watchRef.current=navigator.geolocation.watchPosition(pos=>{
+   setGpsStatus('GPS connected');setGpsError('');
+   const kmh=Math.max(0,(pos.coords.speed||0)*3.6);setSpeed(kmh);
+   const point={lat:pos.coords.latitude,lng:pos.coords.longitude,at:pos.timestamp||Date.now(),speed:kmh};
+   let current=activeRef.current;
+   if(!current&&autoMode){
+    if(kmh>=5){movingRef.current+=1}else movingRef.current=0;
+    if(movingRef.current>=2){beginRide('automatic',pos);movingRef.current=0}
+   }else if(current){
+    const points=current.points||[],last=points[points.length-1];
+    if(last){const gap=haversine(last,point);if(gap>=3&&gap<250){current={...current,distanceM:(current.distanceM||0)+gap,points:[...points,point],maxSpeed:Math.max(current.maxSpeed||0,kmh)}}}
+    else current={...current,points:[point],maxSpeed:kmh};
+    if(kmh<2){stillRef.current+=1}else stillRef.current=0;
+    activeRef.current=current;setActiveRide(current);setDistance(current.distanceM||0);
+    if(stillRef.current>=24&&current.mode==='automatic'){finishRide()}
+   }
+  },err=>{setGpsStatus('GPS unavailable');setGpsError(err.code===1?'Location permission denied. Allow location access in Android settings.':err.message||'GPS signal unavailable')},{enableHighAccuracy:true,maximumAge:1000,timeout:15000});
+  return()=>{if(watchRef.current!==null)navigator.geolocation.clearWatch(watchRef.current)};
+ },[autoMode]);
+ React.useEffect(()=>{if(!activeRide)return;const tick=()=>{setElapsed(Math.floor((Date.now()-Date.parse(activeRide.startAt))/1000));setDistance(activeRef.current?.distanceM||0)};tick();const id=setInterval(tick,1000);return()=>clearInterval(id)},[!!activeRide]);
+ const fmtTime=s=>{const h=Math.floor(s/3600),m=Math.floor(s%3600/60),sec=s%60;return [h,m,sec].map(n=>String(n).padStart(2,'0')).join(':')};
+ const fmtDistance=m=>(m/1000).toFixed(2);
+ const today=new Date().toLocaleDateString('en-CA');
+ const todays=rides.filter(r=>new Date(r.startAt).toLocaleDateString('en-CA')===today);
+ const todayKm=todays.reduce((s,r)=>s+(r.distanceM||0),0)/1000+(activeRide?(activeRide.distanceM||0)/1000:0);
+ const todaySeconds=todays.reduce((s,r)=>s+(r.seconds||0),0)+ (activeRide?elapsed:0);
+ const openMap=ride=>{const pts=ride.points||[];if(!pts.length)return;const first=pts[0],last=pts[pts.length-1],url='https://www.google.com/maps/dir/?api=1&origin='+first.lat+','+first.lng+'&destination='+last.lat+','+last.lng+'&travelmode=driving';window.open(url,'_blank','noopener,noreferrer')};
+ const exportCsv=()=>{const rows=[['Date','Start','End','Distance KM','Duration seconds','Max speed KMH','Tracking mode','Google Maps URL'],...rides.map(r=>[new Date(r.startAt).toLocaleDateString(),new Date(r.startAt).toLocaleTimeString(),r.endAt?new Date(r.endAt).toLocaleTimeString():'',fmtDistance(r.distanceM||0),r.seconds||0,r.maxSpeed||0,r.mode,r.points?.length?'https://www.google.com/maps/dir/?api=1&origin='+r.points[0].lat+','+r.points[0].lng+'&destination='+r.points[r.points.length-1].lat+','+r.points[r.points.length-1].lng+'&travelmode=driving':''])];const csv=rows.map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');const a=document.createElement('a'),url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.href=url;a.download='Bike-Tracker-Ride-History.csv';a.click();URL.revokeObjectURL(url)};
+ const monthly=rides.filter(r=>new Date(r.startAt).getMonth()===new Date().getMonth()&&new Date(r.startAt).getFullYear()===new Date().getFullYear()).reduce((s,r)=>s+(r.distanceM||0),0)/1000;
+ return <div className="bikeApp">
+  <header className="bikeHeader"><button className="bikeBack" onClick={onBack}>‹</button><div className="bikeBrand"><span className="bikeBrandIcon"><Bike size={23}/></span><span><b>Bike Tracker</b><small>Smart Office • Motorcycle</small></span></div><span className={'gpsBadge '+(gpsStatus==='GPS connected'?'gpsOn':'')}><span/>{gpsStatus}</span></header>
+  <main className="bikeMain">
+   <section className="bikeHero"><div className="bikeHeroGlow"/><div className="bikeHeroTop"><span>YOUR RIDE TODAY</span><span className="bikeLive">{activeRide?'● RECORDING':'● READY'}</span></div><div className="bikeKm">{todayKm.toFixed(2)} <small>KM</small></div><div className="bikeHeroStats"><div><Timer size={17}/><b>{fmtTime(todaySeconds)}</b><small>Ride time</small></div><div><Route size={17}/><b>{todays.length+(activeRide?1:0)}</b><small>Rides today</small></div><div><Gauge size={17}/><b>{Math.round(speed)}</b><small>Speed km/h</small></div></div></section>
+   <div className="bikeActionRow"><button className="bikeStart" disabled={!!activeRide} onClick={()=>beginRide('manual')}><Play size={19} fill="currentColor"/> START RIDE</button><button className="bikeStop" disabled={!activeRide} onClick={finishRide}><Square size={17} fill="currentColor"/> STOP</button></div>
+   <div className="bikeMode"><div><b>Automatic ride detection</b><small>Detects movement using GPS when this screen is active</small></div><button className={'bikeSwitch '+(autoMode?'on':'')} onClick={()=>setAutoMode(v=>!v)} aria-label="Toggle automatic ride detection"><i/></button></div>
+   {gpsError&&<div className="bikeError"><MapPin size={17}/>{gpsError}</div>}
+   <div className="bikeTabs"><button className={tab==='ride'?'active':''} onClick={()=>setTab('ride')}>Ride</button><button className={tab==='history'?'active':''} onClick={()=>setTab('history')}>History</button><button className={tab==='report'?'active':''} onClick={()=>setTab('report')}>Reports</button><button className={tab==='settings'?'active':''} onClick={()=>setTab('settings')}>Settings</button></div>
+   {tab==='ride'&&<><div className="bikeSectionTitle">Current ride <span>{activeRide?'In progress':'Not started'}</span></div><div className="bikeMetrics"><div><span><Route size={17}/></span><b>{fmtDistance(distance)} km</b><small>Distance</small></div><div><span><Timer size={17}/></span><b>{fmtTime(elapsed)}</b><small>Duration</small></div><div><span><TrendingUp size={17}/></span><b>{Math.round(activeRide?.maxSpeed||speed)} km/h</b><small>Max speed</small></div></div><div className="bikeMapCard"><div className="bikeMapArt"><div className="bikeMapRoad roadOne"/><div className="bikeMapRoad roadTwo"/><div className="bikeMapPin"><MapPin size={26}/></div><div className="bikeMapLabel">GPS ROUTE TRACKING</div></div><p>প্রতিটি রাইডের GPS পয়েন্ট সংরক্ষিত হবে। রাইড শেষ হলে History থেকে Google Maps-এ রুট খুলতে পারবেন।</p></div></>}
+   {tab==='history'&&<><div className="bikeSectionTitle">Ride history <button onClick={exportCsv} className="bikeExport"><Download size={15}/> Excel / CSV</button></div>{rides.length?rides.map(r=><div className="bikeRideItem" key={r.id}><div className="bikeRideIcon"><Bike size={20}/></div><div className="bikeRideInfo"><b>{new Date(r.startAt).toLocaleDateString()} • {new Date(r.startAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</b><small>{r.endAt?new Date(r.endAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'In progress'} • {r.mode==='automatic'?'Automatic':'Manual'}</small></div><div className="bikeRideValue"><b>{fmtDistance(r.distanceM||0)} km</b><button onClick={()=>openMap(r)} disabled={!r.points?.length}><Navigation size={13}/> Map</button></div></div>):<div className="bikeEmpty"><Route size={30}/><b>No rides recorded yet</b><small>Your completed rides will appear here.</small></div>}</>}
+   {tab==='report'&&<><div className="bikeSectionTitle">Ride reports</div><div className="bikeReportGrid"><div><small>TODAY</small><b>{todayKm.toFixed(2)} km</b><span>{todays.length+(activeRide?1:0)} rides</span></div><div><small>THIS MONTH</small><b>{monthly.toFixed(2)} km</b><span>{rides.length} saved rides</span></div><div><small>ALL TIME</small><b>{(rides.reduce((s,r)=>s+(r.distanceM||0),0)/1000+(activeRide?(activeRide.distanceM||0)/1000)).toFixed(2)} km</b><span>Total distance</span></div><div><small>TOP SPEED</small><b>{Math.round(Math.max(0,...rides.map(r=>r.maxSpeed||0),activeRide?.maxSpeed||0))} km/h</b><span>Recorded maximum</span></div></div><button className="bikeWideExport" onClick={exportCsv}><Download size={17}/> Export ride history to Excel-compatible CSV</button></>}
+   {tab==='settings'&&<><div className="bikeSectionTitle">Settings</div><div className="bikeSetting"><Fuel size={20}/><div><b>Fuel price</b><small>BDT per litre</small></div><input type="number" min="0" value={fuelPrice} onChange={e=>setFuelPrice(Math.max(0,Number(e.target.value)))}/></div><div className="bikeSettingNote">GPS tracking requires location permission. For reliable tracking with the screen off, the Android app will need native background-location permission and a foreground service. This web module currently records while it is running and the device allows location updates.</div></>}
+   <div className="bikeFooter">Smart Office • Bike Tracker • Your rides stay on this device</div>
+  </main>
+ </div>
+}
 function SmartOfficeSplash(){
  React.useEffect(()=>{const timer=window.setTimeout(()=>{const node=document.getElementById('smart-office-splash');if(node){node.classList.add('splashExit');window.setTimeout(()=>node.remove(),220)}} ,2000);return()=>window.clearTimeout(timer)},[]);
  const streams=Array.from({length:22},(_,i)=>({id:i,left:(i*47)%100,delay:-((i*137)%2000)/1000,duration:1.5+((i*29)%18)/10,text:Array.from({length:12},(_,j)=>((i+j*7)%2?'1':'0')).join('')}));
@@ -1130,10 +1206,11 @@ function App(){
  const [showSplash,setShowSplash]=React.useState(true);
  const [excel,setExcel]=React.useState(false);
  const [calculator,setCalculator]=React.useState(false);
+ const [bikeTracker,setBikeTracker]=React.useState(false);
  const [officeFile,setOfficeFile]=React.useState(null);
  const [selectedTool,setSelectedTool]=React.useState(null);
  const [recentFiles,setRecentFiles]=React.useState(()=>{try{return JSON.parse(localStorage.getItem('smartoffice-recent-files')||'[]')}catch{return[]}});
- const cards=[{name:'Word',desc:'Create and edit documents',icon:FileText,color:'#2463c7',ext:'docx'},{name:'Excel',desc:'Spreadsheets and calculations',icon:Table2,color:'#16834b',ext:'xlsx'},{name:'PowerPoint',desc:'Presentations and slides',icon:Presentation,color:'#d66a28',ext:'pptx'},{name:'PDF Reader',desc:'View PDF documents',icon:File,color:'#c83b45',ext:'pdf'},{name:'Calculator',desc:'Fast everyday calculations',icon:Calculator,color:'#2563eb',ext:'calc'}];
+ const cards=[{name:'Word',desc:'Create and edit documents',icon:FileText,color:'#2463c7',ext:'docx'},{name:'Excel',desc:'Spreadsheets and calculations',icon:Table2,color:'#16834b',ext:'xlsx'},{name:'PowerPoint',desc:'Presentations and slides',icon:Presentation,color:'#d66a28',ext:'pptx'},{name:'PDF Reader',desc:'View PDF documents',icon:File,color:'#c83b45',ext:'pdf'},{name:'Calculator',desc:'Fast everyday calculations',icon:Calculator,color:'#2563eb',ext:'calc'},{name:'Bike Tracker',desc:'Motorcycle GPS ride tracking',icon:Bike,color:'linear-gradient(145deg,#ff8a00,#ef4444)',ext:'bike'}];
  const refreshRecent=()=>{
   let list=[];try{list=JSON.parse(localStorage.getItem('smartoffice-recent-files')||'[]')}catch{}
   try{const wb=JSON.parse(localStorage.getItem('smartoffice-workbook')||'null');if(wb&&wb.workbookName){const item={id:'excel-current',name:(wb.workbookName||'Book1')+'.xlsx',type:'Excel',updatedAt:wb.savedAt||new Date().toISOString()};list=[item,...list.filter(x=>x.id!=='excel-current')];localStorage.setItem('smartoffice-recent-files',JSON.stringify(list));}}catch{}
@@ -1143,10 +1220,11 @@ function App(){
  React.useEffect(()=>{const timer=window.setTimeout(()=>setShowSplash(false),2000);return()=>window.clearTimeout(timer)},[]);
  if(showSplash)return <SmartOfficeSplash/>;
  if(calculator)return <CalculatorEditor onBack={()=>setCalculator(false)}/>;
+ if(bikeTracker)return <BikeTracker onBack={()=>setBikeTracker(false)}/>;
  if(excel)return <ExcelEditor onBack={()=>{setExcel(false);refreshRecent()}}/>;
  if(officeFile?.type==='Word')return <WordEditor file={officeFile} onBack={()=>{setOfficeFile(null);refreshRecent()}}/>;
  if(officeFile?.type==='PowerPoint')return <PowerPointEditor file={officeFile} onBack={()=>{setOfficeFile(null);refreshRecent()}}/>;
- const openTool=tool=>{if(tool==='Calculator'){setCalculator(true);return}setSelectedTool(tool);refreshRecent()};
+ const openTool=tool=>{if(tool==='Calculator'){setCalculator(true);return}if(tool==='Bike Tracker'){setBikeTracker(true);return}setSelectedTool(tool);refreshRecent()};
  const openRecent=item=>{setSelectedTool(null);if(item.type==='Excel')setExcel(true);else if(item.type==='Word'||item.type==='PowerPoint')setOfficeFile(item);else alert('PDF Reader পরবর্তী ধাপে যুক্ত হবে।')};
  const createOfficeFile=type=>{const ext=type==='Word'?'docx':'pptx';const item={id:type+'-'+Date.now(),name:(type==='Word'?'Document':'Presentation')+'-'+new Date().toLocaleDateString('en-CA')+'.'+ext,type,updatedAt:new Date().toISOString()};const list=[item,...recentFiles.filter(x=>x.id!==item.id)];setRecentFiles(list);localStorage.setItem('smartoffice-recent-files',JSON.stringify(list));setSelectedTool(null);setOfficeFile(item)};
  const toolFiles=recentFiles.filter(f=>f.type===selectedTool);
