@@ -247,9 +247,19 @@ jobs:
           test -n "$ANDROID_KEY_ALIAS"
           test -n "$ANDROID_KEY_PASSWORD"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/smart-office-release.jks
-          echo "Validating release keystore and alias..."
-          keytool -list -keystore android/app/smart-office-release.jks -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" >/dev/null
-          echo "Keystore and alias validation passed."
+          echo "Checking decoded keystore file..."
+          ls -l android/app/smart-office-release.jks
+          echo "Validating keystore password (diagnostic output contains no password)..."
+          set +e
+          keytool -list -keystore android/app/smart-office-release.jks -storepass:env ANDROID_KEYSTORE_PASSWORD 2>&1
+          KEYTOOL_STATUS=$?
+          set -e
+          if [ "$KEYTOOL_STATUS" -ne 0 ]; then
+            echo "::error::Keystore password or decoded keystore file is invalid. Check ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD repository secrets."
+            exit 1
+          fi
+          echo "Checking key alias..."
+          keytool -list -keystore android/app/smart-office-release.jks -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" 2>&1
           python3 - <<'PY'
           from pathlib import Path
           import re
