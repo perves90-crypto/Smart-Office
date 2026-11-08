@@ -8,6 +8,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      HAS_RELEASE_SIGNING: ${{ env.HAS_RELEASE_SIGNING == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -312,7 +314,7 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
       - name: Configure permanent release signing
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
+        if: ${{ env.HAS_RELEASE_SIGNING == 'true' }}
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -384,7 +386,7 @@ jobs:
           p.write_text(s)
           PY
       - name: Build signed release APK
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
+        if: ${{ env.HAS_RELEASE_SIGNING == 'true' }}
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -401,7 +403,7 @@ jobs:
           EOF
           "$HOME/gradle-dist/gradle-8.11.1/bin/gradle" --no-daemon -I /tmp/kotlin-fix.gradle assembleRelease
       - uses: actions/upload-artifact@v4
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
+        if: ${{ env.HAS_RELEASE_SIGNING == 'true' }}
         with:
           name: Smart-Office-release-apk
           path: android/app/build/outputs/apk/release/app-release.apk
