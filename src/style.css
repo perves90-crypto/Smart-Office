@@ -158,3 +158,9 @@
 .bikeChartBar small{font-size:8px;color:#8291a6;white-space:nowrap}
 .bikeReportActions{display:grid;gap:8px}.bikeReportActions .bikeWideExport{margin:0}
 @media print{body *{visibility:hidden!important}.bikeApp,.bikeApp *{visibility:visible!important}.bikeApp{position:absolute;left:0;top:0;width:100%;height:auto;overflow:visible;background:#fff}.bikeHeader,.bikeTabs,.bikeActionRow,.bikeMode,.bikeFooter,.bikeReportActions,.bikeHistoryFilters,.bikeDateRange{display:none!important}.bikeMain{padding:0;overflow:visible}.bikeHero{box-shadow:none}}
+
+.bikeRealMap{height:230px;width:100%;position:relative;z-index:0;border-radius:13px;overflow:hidden;background:#e8eef5}
+.bikeMapHint{position:absolute;z-index:500;top:8px;left:8px;padding:5px 8px;border-radius:7px;background:#fff;color:#315274;font-size:9px;font-weight:800;box-shadow:0 2px 8px #142b4822}
+.bikeMapCard .bikeRealMap{margin:0}
+.bikeSetting{flex-wrap:wrap}
+@media print{.bikeRealMap{height:180px!important}}
