@@ -307,6 +307,9 @@ jobs:
             }
           }
           EOF
+          echo "=== Android debug signing certificate SHA-1 (for Google Android OAuth client) ==="
+          "$HOME/gradle-dist/gradle-8.11.1/bin/gradle" --no-daemon -I /tmp/kotlin-fix.gradle signingReport
+          echo "=== Building debug APK ==="
           "$HOME/gradle-dist/gradle-8.11.1/bin/gradle" --no-daemon -I /tmp/kotlin-fix.gradle assembleDebug
       - uses: actions/upload-artifact@v4
         with:
