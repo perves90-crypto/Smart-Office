@@ -38,11 +38,71 @@ jobs:
           mkdir -p android/app/src/main/java/com/smartoffice/app
           cat > android/app/src/main/java/com/smartoffice/app/MainActivity.java <<'EOF'
           package com.smartoffice.app;
+          import android.os.Bundle;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
           import com.getcapacitor.BridgeActivity;
           public class MainActivity extends BridgeActivity {
-            @Override public void onCreate(android.os.Bundle savedInstanceState) {
+            @Override public void onCreate(Bundle savedInstanceState) {
               registerPlugin(BikeTrackingPlugin.class);
               super.onCreate(savedInstanceState);
+              WebView webView = getBridge().getWebView();
+              WebSettings settings = webView.getSettings();
+              settings.setJavaScriptEnabled(true);
+              settings.setJavaScriptCanOpenWindowsAutomatically(true);
+              settings.setSupportMultipleWindows(true);
+              webView.setWebChromeClient(new OAuthPopupWebChromeClient(getBridge()));
+            }
+          }
+          EOF
+          cat > android/app/src/main/java/com/smartoffice/app/OAuthPopupWebChromeClient.java <<'EOF'
+          package com.smartoffice.app;
+          import android.app.Dialog;
+          import android.os.Message;
+          import android.view.ViewGroup;
+          import android.webkit.CookieManager;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import com.getcapacitor.Bridge;
+          import com.getcapacitor.BridgeWebChromeClient;
+          public class OAuthPopupWebChromeClient extends BridgeWebChromeClient {
+            private Dialog popupDialog;
+            private WebView popupWebView;
+            public OAuthPopupWebChromeClient(Bridge bridge) { super(bridge); }
+            @Override public boolean onCreateWindow(WebView parent, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+              if (popupDialog != null && popupDialog.isShowing()) popupDialog.dismiss();
+              WebView popup = new WebView(parent.getContext());
+              popup.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+              WebSettings settings = popup.getSettings();
+              settings.setJavaScriptEnabled(true);
+              settings.setDomStorageEnabled(true);
+              settings.setJavaScriptCanOpenWindowsAutomatically(true);
+              settings.setSupportMultipleWindows(true);
+              CookieManager cookies = CookieManager.getInstance();
+              cookies.setAcceptCookie(true);
+              cookies.setAcceptThirdPartyCookies(popup, true);
+              popup.setWebViewClient(new WebViewClient());
+              popup.setWebChromeClient(this);
+              popupDialog = new Dialog(parent.getContext());
+              popupDialog.setContentView(popup);
+              popupDialog.setOnDismissListener(dialog -> {
+                popup.stopLoading();
+                popup.destroy();
+                popupWebView = null;
+                popupDialog = null;
+              });
+              popupWebView = popup;
+              popupDialog.show();
+              WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+              transport.setWebView(popup);
+              resultMsg.sendToTarget();
+              return true;
+            }
+            @Override public void onCloseWindow(WebView window) {
+              if (popupDialog != null && popupDialog.isShowing()) popupDialog.dismiss();
+              super.onCloseWindow(window);
             }
           }
           EOF
@@ -234,7 +294,25 @@ jobs:
           test -s gradle-8.11.1-all.zip
           unzip -q gradle-8.11.1-all.zip
           "$HOME/gradle-dist/gradle-8.11.1/bin/gradle" --version
+      - name: Build debug APK (no release keystore required)
+        run: |
+          cd android
+          cat > /tmp/kotlin-fix.gradle <<'EOF'
+          allprojects {
+            configurations.configureEach {
+              exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+              exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+            }
+          }
+          EOF
+          "$HOME/gradle-dist/gradle-8.11.1/bin/gradle" --no-daemon -I /tmp/kotlin-fix.gradle assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Smart-Office-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
       - name: Configure permanent release signing
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -306,6 +384,7 @@ jobs:
           p.write_text(s)
           PY
       - name: Build signed release APK
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -322,6 +401,7 @@ jobs:
           EOF
           "$HOME/gradle-dist/gradle-8.11.1/bin/gradle" --no-daemon -I /tmp/kotlin-fix.gradle assembleRelease
       - uses: actions/upload-artifact@v4
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
         with:
           name: Smart-Office-release-apk
           path: android/app/build/outputs/apk/release/app-release.apk
