@@ -1139,6 +1139,7 @@ function BikeTracker({onBack}){
  const [cloudBusy,setCloudBusy]=React.useState(false);
  const [lastCloudSync,setLastCloudSync]=React.useState('');
  const cloudFileId=React.useRef(localStorage.getItem('smartoffice-bike-drive-file-id')||'');
+ const cloudDataRef=React.useRef({});
  const cloudFolderId=React.useRef(localStorage.getItem('smartoffice-bike-drive-folder-id')||'');
  const [rides,setRides]=React.useState(()=>{try{return JSON.parse(localStorage.getItem('smartoffice-bike-rides')||'[]')}catch{return[]}});
  const [activeRide,setActiveRide]=React.useState(()=>{try{return JSON.parse(localStorage.getItem('smartoffice-bike-active')||'null')}catch{return null}});
@@ -1200,7 +1201,8 @@ function BikeTracker({onBack}){
     if(!folderId){const folder=await driveRequest('https://www.googleapis.com/drive/v3/files?fields=id,name',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Smart Office',mimeType:'application/vnd.google-apps.folder'})});folderId=folder.id}
     cloudFolderId.current=folderId;localStorage.setItem('smartoffice-bike-drive-folder-id',folderId);
    }
-   const payload={schemaVersion:1,product:'Smart Office Motorcycle Tracker',account:googleEmail,exportedAt:new Date().toISOString(),rides,activeRide,motorcycles,selectedBikeId,fuelLogs,maintenance,fuelPrice,speedLimit};
+   const latest=cloudDataRef.current;
+   const payload={schemaVersion:1,product:'Smart Office Motorcycle Tracker',account:googleEmail,exportedAt:new Date().toISOString(),...latest};
    const metadata={name:'Motorcycle-Tracker-Backup.json',mimeType:'application/json',parents:[folderId]};
    const boundary='smartoffice_'+Date.now();
    const body='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(metadata)+'\r\n--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(payload)+'\r\n--'+boundary+'--';
@@ -1214,8 +1216,8 @@ function BikeTracker({onBack}){
  const disconnectGoogleDrive=()=>{if(googleToken&&window.google?.accounts?.oauth2)window.google.accounts.oauth2.revoke(googleToken,()=>{});setGoogleToken('');setGoogleEmail('');setCloudStatus('Disconnected')};
  const cloudSyncTimer=React.useRef(null);
  const nativeSaveTimer=React.useRef(null);
- React.useEffect(()=>{if(!googleToken)return;const timer=setInterval(()=>{syncBikeDataToDrive(false)},30000);return()=>clearInterval(timer)},[googleToken,rides,activeRide,motorcycles,selectedBikeId,fuelLogs,maintenance,fuelPrice,speedLimit]);
- React.useEffect(()=>{if(!googleToken)return;const timer=setTimeout(()=>syncBikeDataToDrive(false),30000);return()=>clearTimeout(timer)},[googleToken,rides,activeRide,motorcycles,selectedBikeId,fuelLogs,maintenance,fuelPrice,speedLimit]);
+ cloudDataRef.current={rides,activeRide,motorcycles,selectedBikeId,fuelLogs,maintenance,fuelPrice,speedLimit};
+ React.useEffect(()=>{if(!googleToken)return;const timer=setInterval(()=>syncBikeDataToDrive(false),30000);return()=>clearInterval(timer)},[googleToken]);
  React.useEffect(()=>{let alive=true;(async()=>{let nativeData=null;try{if(Capacitor.isNativePlatform()){const result=await BikeTracking.getBikeData();nativeData=JSON.parse(result.dataJson||'null')}}catch(e){}if(!alive)return;if(nativeData&&nativeData.version===2){setRides(Array.isArray(nativeData.rides)?nativeData.rides:[]);setActiveRide(nativeData.activeRide||null);setMotorcycles(Array.isArray(nativeData.motorcycles)&&nativeData.motorcycles.length?nativeData.motorcycles:[{id:'bike-default',name:'My Motorcycle'}]);setSelectedBikeId(nativeData.selectedBikeId||'bike-default');setFuelLogs(Array.isArray(nativeData.fuelLogs)?nativeData.fuelLogs:[]);setMaintenance(Array.isArray(nativeData.maintenance)?nativeData.maintenance:[]);setFuelPrice(Number(nativeData.fuelPrice)||120);setSpeedLimit(Number(nativeData.speedLimit)||80)}setNativeDataReady(true)})();return()=>{alive=false}},[]);
  const [fuelLitres,setFuelLitres]=React.useState('');
  const [fuelOdometer,setFuelOdometer]=React.useState('');
