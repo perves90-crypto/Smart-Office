@@ -1217,7 +1217,7 @@ function BikeTracker({onBack}){
    }
   },err=>{setGpsStatus('GPS unavailable');setGpsError(err.code===1?'Location permission denied. Allow location access in Android settings.':err.message||'GPS signal unavailable')},{enableHighAccuracy:true,maximumAge:1000,timeout:15000});
   return()=>{if(watchRef.current!==null)navigator.geolocation.clearWatch(watchRef.current)};
- },[autoMode]);
+ },[autoMode,speedLimit,selectedBikeId]);
  React.useEffect(()=>{if(!activeRide)return;const tick=()=>{setElapsed(Math.floor((Date.now()-Date.parse(activeRide.startAt))/1000));setDistance(activeRef.current?.distanceM||0)};tick();const id=setInterval(tick,1000);return()=>clearInterval(id)},[!!activeRide]);
  React.useEffect(()=>{if(!Capacitor.isNativePlatform())return;let alive=true;const syncNative=async()=>{if(!activeRef.current)return;try{const data=await BikeTracking.getTrackData();if(!alive||!data.tracking)return;const points=JSON.parse(data.pointsJson||'[]');if(points.length){const current=activeRef.current;if(current){const merged={...current,points,distanceM:Math.max(current.distanceM||0,data.distanceM||0),maxSpeed:Math.max(current.maxSpeed||0,data.maxSpeed||0)};activeRef.current=merged;setActiveRide(merged);setDistance(merged.distanceM)}}}catch(e){}};syncNative();const id=setInterval(syncNative,5000);return()=>{alive=false;clearInterval(id)}},[]);
 
