@@ -315,6 +315,11 @@ jobs:
           test -s gradle-8.11.1-all.zip
           unzip -q gradle-8.11.1-all.zip
           "$HOME/gradle-dist/gradle-8.11.1/bin/gradle" --version
+      - name: Restore persistent Android debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.config/.android/debug.keystore
+          key: smart-office-android-debug-keystore-v1
       - name: Build debug APK (no release keystore required)
         run: |
           cd android
