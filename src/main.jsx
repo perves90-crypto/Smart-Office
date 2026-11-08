@@ -1221,16 +1221,17 @@ function BikeTracker({onBack}){
  const fmtTime=s=>{const h=Math.floor(s/3600),m=Math.floor(s%3600/60),sec=s%60;return [h,m,sec].map(n=>String(n).padStart(2,'0')).join(':')};
  const fmtDistance=m=>(m/1000).toFixed(2);
  const today=new Date().toLocaleDateString('en-CA');
- const todays=rides.filter(r=>new Date(r.startAt).toLocaleDateString('en-CA')===today);
- const filteredRides=rides.filter(r=>{const d=new Date(r.startAt),now=new Date();if(historyFilter==='today')return d.toLocaleDateString('en-CA')===today;if(historyFilter==='month')return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();if(historyFilter==='week'){const start=new Date(now);start.setHours(0,0,0,0);start.setDate(start.getDate()-6);return d>=start}if(historyFilter==='custom'){const day=d.toLocaleDateString('en-CA');return (!historyFrom||day>=historyFrom)&&(!historyTo||day<=historyTo)}return true});
+ const bikeRides=rides.filter(r=>(r.bikeId||'bike-default')===selectedBikeId);
+ const todays=bikeRides.filter(r=>new Date(r.startAt).toLocaleDateString('en-CA')===today);
+ const filteredRides=bikeRides.filter(r=>{const d=new Date(r.startAt),now=new Date();if(historyFilter==='today')return d.toLocaleDateString('en-CA')===today;if(historyFilter==='month')return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();if(historyFilter==='week'){const start=new Date(now);start.setHours(0,0,0,0);start.setDate(start.getDate()-6);return d>=start}if(historyFilter==='custom'){const day=d.toLocaleDateString('en-CA');return (!historyFrom||day>=historyFrom)&&(!historyTo||day<=historyTo)}return true});
  const todayKm=todays.reduce((s,r)=>s+(r.distanceM||0),0)/1000+(activeRide?(activeRide.distanceM||0)/1000:0);
  const todaySeconds=todays.reduce((s,r)=>s+(r.seconds||0),0)+ (activeRide?elapsed:0);
- const allDistanceM=rides.reduce((s,r)=>s+(r.distanceM||0),0)+(activeRide?(activeRide.distanceM||0):0);
- const allSeconds=rides.reduce((s,r)=>s+(r.seconds||0),0)+(activeRide?elapsed:0);
- const allRideCount=rides.length+(activeRide?1:0);
+ const allDistanceM=bikeRides.reduce((s,r)=>s+(r.distanceM||0),0)+(activeRide?(activeRide.distanceM||0):0);
+ const allSeconds=bikeRides.reduce((s,r)=>s+(r.seconds||0),0)+(activeRide?elapsed:0);
+ const allRideCount=bikeRides.length+(activeRide?1:0);
  const averageRideKm=allRideCount?allDistanceM/1000/allRideCount:0;
  const averageSpeed=allSeconds?allDistanceM/allSeconds*3.6:0;
- const reportRides=rides.filter(r=>{const day=new Date(r.startAt).toLocaleDateString('en-CA');return (!reportFrom||day>=reportFrom)&&(!reportTo||day<=reportTo)});
+ const reportRides=bikeRides.filter(r=>{const day=new Date(r.startAt).toLocaleDateString('en-CA');return (!reportFrom||day>=reportFrom)&&(!reportTo||day<=reportTo)});
  const reportDistanceM=reportRides.reduce((s,r)=>s+(r.distanceM||0),0);
  const reportSeconds=reportRides.reduce((s,r)=>s+(r.seconds||0),0);
  const reportCount=reportRides.length;
@@ -1249,7 +1250,7 @@ function BikeTracker({onBack}){
  const restoreData=e=>{const file=e.target.files&&e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const d=JSON.parse(reader.result);if(!Array.isArray(d.rides)||!Array.isArray(d.motorcycles))throw new Error('Invalid');setRides(d.rides);setMotorcycles(d.motorcycles);setFuelLogs(Array.isArray(d.fuelLogs)?d.fuelLogs:[]);setMaintenance(Array.isArray(d.maintenance)?d.maintenance:[]);if(d.fuelPrice)setFuelPrice(d.fuelPrice);if(d.speedLimit)setSpeedLimit(d.speedLimit);alert('Backup restored successfully.')}catch(err){alert('Invalid backup file.')}};reader.readAsText(file);e.target.value=''};
  const addMotorcycle=()=>{const name=window.prompt('Motorcycle name / model?');if(!name||!name.trim())return;const bike={id:'bike-'+Date.now(),name:name.trim()};setMotorcycles(old=>[...old,bike]);setSelectedBikeId(bike.id)};
  const reportGraphMax=Math.max(1,...reportDailyGroups.map(x=>x.distanceM));
- const monthly=rides.filter(r=>new Date(r.startAt).getMonth()===new Date().getMonth()&&new Date(r.startAt).getFullYear()===new Date().getFullYear()).reduce((s,r)=>s+(r.distanceM||0),0)/1000;
+ const monthly=bikeRides.filter(r=>new Date(r.startAt).getMonth()===new Date().getMonth()&&new Date(r.startAt).getFullYear()===new Date().getFullYear()).reduce((s,r)=>s+(r.distanceM||0),0)/1000;
  return <div className="bikeApp">
   <header className="bikeHeader"><button className="bikeBack" onClick={onBack}>‹</button><div className="bikeBrand"><span className="bikeBrandIcon"><Bike size={23}/></span><span><b>Bike Tracker</b><small>Smart Office • Motorcycle</small></span></div><span className={'gpsBadge '+(gpsStatus==='GPS connected'?'gpsOn':'')}><span/>{gpsStatus}</span></header>
   <main className="bikeMain">
