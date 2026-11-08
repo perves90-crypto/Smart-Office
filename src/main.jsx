@@ -1131,7 +1131,7 @@ function BikeTracker({onBack}){
  const [autoMode,setAutoMode]=React.useState(true);
  const [tab,setTab]=React.useState('ride');
  const [fuelPrice,setFuelPrice]=React.useState(()=>Number(localStorage.getItem('smartoffice-bike-fuel-price')||120));
- const watchRef=React.useRef(null),activeRef=React.useRef(activeRide),stillRef=React.useRef(0),movingRef=React.useRef(0);
+ const watchRef=React.useRef(null),activeRef=React.useRef(activeRide),stillRef=React.useRef(0),movingRef=React.useRef(0),lastFixRef=React.useRef(null);
  React.useEffect(()=>{activeRef.current=activeRide;localStorage.setItem('smartoffice-bike-active',JSON.stringify(activeRide))},[activeRide]);
  React.useEffect(()=>{localStorage.setItem('smartoffice-bike-rides',JSON.stringify(rides))},[rides]);
  React.useEffect(()=>{localStorage.setItem('smartoffice-bike-fuel-price',String(fuelPrice))},[fuelPrice]);
@@ -1152,16 +1152,26 @@ function BikeTracker({onBack}){
   if(!navigator.geolocation){setGpsStatus('GPS not supported');return}
   setGpsStatus('Connecting GPS…');
   watchRef.current=navigator.geolocation.watchPosition(pos=>{
+   const accuracy=Number(pos.coords.accuracy||999);
+   if(accuracy>50){setGpsStatus('GPS signal weak');return}
    setGpsStatus('GPS connected');setGpsError('');
-   const kmh=Math.max(0,(pos.coords.speed||0)*3.6);setSpeed(kmh);
-   const point={lat:pos.coords.latitude,lng:pos.coords.longitude,at:pos.timestamp||Date.now(),speed:kmh};
+   const stamp=pos.timestamp||Date.now();
+   const previousFix=lastFixRef.current;
+   let kmh=pos.coords.speed!=null?Math.max(0,pos.coords.speed*3.6):0;
+   if((pos.coords.speed==null||!Number.isFinite(kmh))&&previousFix){
+    const seconds=(stamp-previousFix.at)/1000;
+    if(seconds>0&&seconds<30){const metres=haversine(previousFix,{lat:pos.coords.latitude,lng:pos.coords.longitude});kmh=metres/seconds*3.6}
+   }
+   setSpeed(kmh);
+   const point={lat:pos.coords.latitude,lng:pos.coords.longitude,at:stamp,speed:kmh,accuracy};
+   lastFixRef.current=point;
    let current=activeRef.current;
    if(!current&&autoMode){
     if(kmh>=5){movingRef.current+=1}else movingRef.current=0;
     if(movingRef.current>=2){beginRide('automatic',pos);movingRef.current=0}
    }else if(current){
     const points=current.points||[],last=points[points.length-1];
-    if(last){const gap=haversine(last,point);if(gap>=3&&gap<250){current={...current,distanceM:(current.distanceM||0)+gap,points:[...points,point],maxSpeed:Math.max(current.maxSpeed||0,kmh)}}}
+    if(last){const gap=haversine(last,point),elapsedSeconds=(point.at-(last.at||point.at))/1000,minimumMove=Math.max(3,((last.accuracy||0)+accuracy)*0.35);if(gap>=minimumMove&&gap<200&&elapsedSeconds>0){current={...current,distanceM:(current.distanceM||0)+gap,points:[...points,point],maxSpeed:Math.max(current.maxSpeed||0,kmh)}}}
     else current={...current,points:[point],maxSpeed:kmh};
     if(kmh<2){stillRef.current+=1}else stillRef.current=0;
     activeRef.current=current;setActiveRide(current);setDistance(current.distanceM||0);
