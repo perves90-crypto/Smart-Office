@@ -145,15 +145,26 @@ jobs:
           if 'BikeLocationService' not in s: s=s.replace('</application>',service+'</application>')
           p.write_text(s)
           PY
-      - name: Use direct Gradle distribution mirror
+      - name: Download Gradle from independent mirror
         run: |
-          echo 'networkTimeout=300000' >> android/gradle/wrapper/gradle-wrapper.properties
-          sed -i 's#https\\://services.gradle.org/distributions/#https\\://downloads.gradle.org/distributions/#' android/gradle/wrapper/gradle-wrapper.properties
-          cat android/gradle/wrapper/gradle-wrapper.properties
+          set -e
+          mkdir -p "$HOME/gradle-dist"
+          cd "$HOME/gradle-dist"
+          for url in \
+            "https://mirrors.huaweicloud.com/gradle/gradle-8.11.1-all.zip" \
+            "https://repo.huaweicloud.com/gradle/gradle-8.11.1-all.zip"; do
+            echo "Trying Gradle mirror: $url"
+            if curl -fL --connect-timeout 30 --max-time 600 --retry 2 --retry-delay 5 "$url" -o gradle-8.11.1-all.zip; then
+              break
+            fi
+            rm -f gradle-8.11.1-all.zip
+          done
+          test -s gradle-8.11.1-all.zip
+          unzip -q gradle-8.11.1-all.zip
+          "$HOME/gradle-dist/gradle-8.11.1/bin/gradle" --version
       - name: Build debug APK
         run: |
           cd android
-          chmod +x gradlew
           cat > /tmp/kotlin-fix.gradle <<'EOF'
           allprojects {
             configurations.configureEach {
@@ -162,18 +173,7 @@ jobs:
             }
           }
           EOF
-          for attempt in 1 2 3 4; do
-            echo "Gradle build attempt $attempt of 4"
-            if ./gradlew --no-daemon -I /tmp/kotlin-fix.gradle assembleDebug; then
-              exit 0
-            fi
-            if [ "$attempt" -lt 4 ]; then
-              echo "Gradle distribution/build request failed; retrying in $((attempt * 15)) seconds..."
-              sleep $((attempt * 15))
-            fi
-          done
-          echo "Gradle build failed after 4 attempts."
-          exit 1
+          "$HOME/gradle-dist/gradle-8.11.1/bin/gradle" --no-daemon -I /tmp/kotlin-fix.gradle assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: Smart-Office-debug-apk
