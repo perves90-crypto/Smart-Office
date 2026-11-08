@@ -27,6 +27,7 @@ jobs:
         run: |
           npm install
           npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/app
+          npm install @capgo/capacitor-social-login
           npm run build
           npx cap init "Smart Office" "com.smartoffice.app" --web-dir=dist
           npx cap add android
